@@ -20,19 +20,28 @@ if [[ -z "${PEAGLE_CONFIG:-}" ]]; then
   exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-mkdir -p "${ROOT}/logs"
-
 if [[ -n "${PEAGLE_ROOT:-}" ]]; then
-  cd "${PEAGLE_ROOT}"
+  ROOT="${PEAGLE_ROOT}"
+elif [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  ROOT="${SLURM_SUBMIT_DIR}"
 else
-  cd "${ROOT}"
+  ROOT="$(pwd)"
 fi
+
+SCRIPT_DIR="${ROOT}/scripts/sol"
+
+if [[ ! -x "${SCRIPT_DIR}/run_cli.sh" ]]; then
+  echo "Could not find run_cli.sh at ${SCRIPT_DIR}/run_cli.sh" >&2
+  echo "PEAGLE_ROOT=${PEAGLE_ROOT:-unset}" >&2
+  echo "SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-unset}" >&2
+  exit 1
+fi
+
+cd "${ROOT}"
 
 echo "PEAGLE_COMMAND=${PEAGLE_COMMAND}"
 echo "PEAGLE_CONFIG=${PEAGLE_CONFIG}"
-echo "PEAGLE_ROOT=${PEAGLE_ROOT:-$ROOT}"
+echo "PEAGLE_ROOT=${ROOT}"
 echo "PEAGLE_RUN_ROOT=${PEAGLE_RUN_ROOT:-unset}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 
