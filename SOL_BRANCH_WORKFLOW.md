@@ -3,6 +3,10 @@
 ## 1. Move the Sol checkout onto your branch
 
 ```bash
+module avail python
+module load python/3.10
+# or: export PEAGLE_PYTHON_BIN=python3.10
+rm -rf .venv-sol  # only needed if this repo already created it with Python 3.6
 bash scripts/sol/bootstrap_branch.sh YOUR_BRANCH
 ```
 

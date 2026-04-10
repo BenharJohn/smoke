@@ -15,6 +15,10 @@ export PEAGLE_CACHE_ROOT=$PEAGLE_RUN_ROOT/cache
 ## 1. Build the environment
 
 ```bash
+module avail python
+module load python/3.10
+# or: export PEAGLE_PYTHON_BIN=python3.10
+rm -rf $PEAGLE_ROOT/.venv-sol  # only needed if an older Python already created it
 bash $PEAGLE_ROOT/scripts/sol/setup_env.sh
 ```
 

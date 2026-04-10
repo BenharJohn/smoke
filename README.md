@@ -278,6 +278,22 @@ bash scripts/sol/setup_env.sh
 
 This creates `.venv-sol`, installs the research dependencies, and defaults large outputs to `$SCRATCH` when available.
 
+The project requires `Python 3.10+`. If Sol's default `python3` is older, load a newer module first or point the helper at a specific interpreter:
+
+```bash
+module avail python
+module load python/3.10
+# or, if the binary is already on PATH:
+export PEAGLE_PYTHON_BIN=python3.10
+```
+
+If you already created `.venv-sol` with an older Python, remove it once after switching interpreters:
+
+```bash
+rm -rf $PEAGLE_ROOT/.venv-sol
+bash scripts/sol/setup_env.sh
+```
+
 If your Sol environment already provides a suitable Python stack and you do not want the helper to run `pip install`, set:
 
 ```bash
