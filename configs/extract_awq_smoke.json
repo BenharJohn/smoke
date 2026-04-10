@@ -1,0 +1,8 @@
+{
+  "dataset": "data/sharegpt.jsonl",
+  "teacher_model_path": "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4",
+  "teacher_quantization": "awq",
+  "output_dir": "runs/extract_awq_1k",
+  "max_examples": 1000,
+  "max_length": 2048
+}

@@ -1,0 +1,11 @@
+{
+  "benchmark_path": "$PEAGLE_BENCHMARK",
+  "verifier_model_path": "$PEAGLE_AWQ_MODEL",
+  "verifier_quantization": "awq",
+  "draft_checkpoint": "$PEAGLE_RUN_ROOT/qwen3_8b/train_bf16_1k/checkpoints/best.pt",
+  "output_path": "$PEAGLE_RUN_ROOT/qwen3_8b/eval_bf16_on_awq.json",
+  "draft_length": 5,
+  "max_new_tokens": 128,
+  "temperature": 0.0,
+  "device": "cuda"
+}

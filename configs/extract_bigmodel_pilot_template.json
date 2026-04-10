@@ -1,0 +1,9 @@
+{
+  "dataset": "data/gemma_smoke_prompts.jsonl",
+  "teacher_model_path": "REPLACE_WITH_MODEL_ID_OR_LOCAL_PATH",
+  "teacher_quantization": "none",
+  "output_dir": "runs/extract_bigmodel_pilot",
+  "max_examples": 32,
+  "max_length": 512,
+  "device": "cuda"
+}

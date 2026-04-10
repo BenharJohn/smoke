@@ -1,0 +1,13 @@
+{
+  "manifest": "runs/extract_bigmodel_3prompt/manifest.jsonl",
+  "output_dir": "runs/train_bigmodel_smoke",
+  "projection_model_path": "REPLACE_WITH_MODEL_ID_OR_LOCAL_PATH",
+  "epochs": 1,
+  "max_examples": 3,
+  "batch_size": 1,
+  "grad_accum_steps": 1,
+  "learning_rate": 0.0001,
+  "checkpoint_every": 1,
+  "device": "cuda",
+  "dtype": "float16"
+}

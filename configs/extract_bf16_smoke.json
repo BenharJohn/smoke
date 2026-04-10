@@ -1,0 +1,8 @@
+{
+  "dataset": "data/sharegpt.jsonl",
+  "teacher_model_path": "meta-llama/Llama-3.1-8B-Instruct",
+  "teacher_quantization": "none",
+  "output_dir": "runs/extract_bf16_1k",
+  "max_examples": 1000,
+  "max_length": 2048
+}

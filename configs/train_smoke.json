@@ -1,0 +1,11 @@
+{
+  "manifest": "runs/extract_awq_1k/manifest.jsonl",
+  "output_dir": "runs/train_awq_1k",
+  "projection_model_path": "meta-llama/Llama-3.1-8B-Instruct",
+  "epochs": 1,
+  "max_examples": 1000,
+  "batch_size": 1,
+  "grad_accum_steps": 4,
+  "learning_rate": 0.0001,
+  "checkpoint_every": 200
+}

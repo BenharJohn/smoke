@@ -1,0 +1,20 @@
+{"question_id":"mini-001","category":"reasoning","turns":["Explain speculative decoding in one paragraph.","Give one practical deployment risk of speculative decoding."]}
+{"question_id":"mini-002","category":"coding","turns":["What is the difference between BF16 and W4A16 in inference workloads?","Why might that matter for a draft head?"]}
+{"question_id":"mini-003","category":"analysis","turns":["Summarize AWQ in simple language.","What limitation would you watch for when using AWQ with hidden-state extraction?"]}
+{"question_id":"mini-004","category":"math","turns":["If tau rises from 4.5 to 5.1, what is the relative improvement?","Interpret that improvement in one sentence."]}
+{"question_id":"mini-005","category":"systems","turns":["Why does checkpointing matter on Colab?","What cadence would you use for a 32k-example run?"]}
+{"question_id":"mini-006","category":"writing","turns":["Write a short abstract sentence for a paper on quantization-aware draft training.","Now rewrite it in plainer language."]}
+{"question_id":"mini-007","category":"reasoning","turns":["What does acceptance rate measure in speculative decoding?","How is it different from tokens per second?"]}
+{"question_id":"mini-008","category":"coding","turns":["Describe a JSONL schema for saving hidden-state extraction metadata.","What field would you add to avoid mixing BF16 and AWQ runs?"]}
+{"question_id":"mini-009","category":"analysis","turns":["Why is a matched tokenizer important when comparing BF16 and AWQ teachers?","What can go wrong if they differ?"]}
+{"question_id":"mini-010","category":"systems","turns":["What makes MT-Bench a useful first benchmark for this study?","What would you postpone until after MT-Bench shows a signal?"]}
+{"question_id":"mini-011","category":"reasoning","turns":["Why might W4A16 change hidden states even if activations stay in higher precision?","Answer in two concise sentences."]}
+{"question_id":"mini-012","category":"coding","turns":["What should a resume checkpoint contain for a PyTorch training run?","Which parts are essential versus nice to have?"]}
+{"question_id":"mini-013","category":"analysis","turns":["What is a strong negative result for this study?","How would you still write it up credibly?"]}
+{"question_id":"mini-014","category":"writing","turns":["Draft a title for a systems paper on quantization-aware EAGLE training.","Now make it shorter and punchier."]}
+{"question_id":"mini-015","category":"math","turns":["If a verifier handles 40 tokens per second autoregressively and 52 with speculation, what is the speedup?","State the answer with two decimal places."]}
+{"question_id":"mini-016","category":"systems","turns":["Why keep BF16 and AWQ extractions in separate run directories?","What metadata helps prove they used the same source prompts?"]}
+{"question_id":"mini-017","category":"reasoning","turns":["Why is W4A8 a stretch goal rather than the first target here?","Answer from a project-risk perspective."]}
+{"question_id":"mini-018","category":"coding","turns":["What does a causal mask do in a draft head?","Why might a single transformer layer be enough for a pilot?"]}
+{"question_id":"mini-019","category":"analysis","turns":["What is the cleanest success criterion for the first study?","Why is that better than demanding near-perfect recovery immediately?"]}
+{"question_id":"mini-020","category":"writing","turns":["Write one sentence that explains tau to a reviewer.","Write a second sentence connecting tau to latency."]}

@@ -1,0 +1,7 @@
+{
+  "teacher_model_path": "google/gemma-3-1b-it",
+  "teacher_quantization": "none",
+  "prompt": "Explain speculative decoding in three short bullet points, then give one sentence on why quantization can change acceptance rates.",
+  "max_new_tokens": 48,
+  "device": "cpu"
+}

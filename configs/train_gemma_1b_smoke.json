@@ -1,0 +1,13 @@
+{
+  "manifest": "runs/extract_gemma_1b_smoke/manifest.jsonl",
+  "output_dir": "runs/train_gemma_1b_smoke",
+  "projection_model_path": "google/gemma-3-1b-it",
+  "epochs": 1,
+  "max_examples": 3,
+  "batch_size": 1,
+  "grad_accum_steps": 1,
+  "learning_rate": 0.0001,
+  "checkpoint_every": 1,
+  "device": "cpu",
+  "dtype": "float32"
+}

@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "peagle-q"
+version = "0.1.0"
+description = "Research scaffold for quantization-aware EAGLE-3 style draft training."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Codex" }
+]
+dependencies = [
+  "torch>=2.4",
+  "transformers>=4.44",
+]
+
+[project.optional-dependencies]
+smoke = [
+  "sentencepiece>=0.2",
+  "protobuf>=4.25",
+]
+research = [
+  "datasets>=2.20",
+  "accelerate>=0.33",
+]
+quant = [
+  "autoawq>=0.2.6",
+]
+serve = [
+  "vllm>=0.6.0",
+]
+dev = [
+  "pytest>=8.2",
+]
+
+[project.scripts]
+peagle-q = "peagle_q.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["peagle_q*"]
+
+[tool.pytest.ini_options]
+norecursedirs = [
+  ".tmp",
+  ".vendor-smoke",
+  ".venv-smoke",
+  "tests/tmp*",
+  "tests/__pycache__",
+]

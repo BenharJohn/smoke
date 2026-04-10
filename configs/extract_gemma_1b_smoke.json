@@ -1,0 +1,9 @@
+{
+  "dataset": "data/gemma_smoke_prompts.jsonl",
+  "teacher_model_path": "google/gemma-3-1b-it",
+  "teacher_quantization": "none",
+  "output_dir": "runs/extract_gemma_1b_smoke",
+  "max_examples": 3,
+  "max_length": 256,
+  "device": "cpu"
+}
