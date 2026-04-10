@@ -30,7 +30,7 @@ fi
 
 SCRIPT_DIR="${ROOT}/scripts/sol"
 
-if [[ ! -x "${SCRIPT_DIR}/run_cli.sh" ]]; then
+if [[ ! -f "${SCRIPT_DIR}/run_cli.sh" ]]; then
   echo "Could not find run_cli.sh at ${SCRIPT_DIR}/run_cli.sh" >&2
   echo "PEAGLE_ROOT=${PEAGLE_ROOT:-unset}" >&2
   echo "SLURM_SUBMIT_DIR=${SLURM_SUBMIT_DIR:-unset}" >&2
@@ -45,4 +45,4 @@ echo "PEAGLE_ROOT=${ROOT}"
 echo "PEAGLE_RUN_ROOT=${PEAGLE_RUN_ROOT:-unset}"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 
-"${SCRIPT_DIR}/run_cli.sh" "${PEAGLE_COMMAND}" --config "${PEAGLE_CONFIG}"
+bash "${SCRIPT_DIR}/run_cli.sh" "${PEAGLE_COMMAND}" --config "${PEAGLE_CONFIG}"
