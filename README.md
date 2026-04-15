@@ -285,7 +285,7 @@ bash scripts/sol/setup_env.sh
 
 This creates `.venv-sol`, installs the research dependencies, and defaults large outputs to `$SCRATCH` when available.
 
-The quantized AWQ path also depends on `gptqmodel`. `setup_env.sh` installs it separately with `--no-build-isolation`, which is the install mode recommended by the package.
+The quantized AWQ path also depends on `gptqmodel`. `setup_env.sh` installs `PyPcre` first and then installs `gptqmodel` separately with `--no-build-isolation`, which is the install mode recommended by the package.
 
 If your Sol environment already provides a suitable Python stack and you do not want the helper to run `pip install`, set:
 
@@ -326,6 +326,7 @@ If an existing `.venv-sol` was created before the AWQ dependency step was added,
 ```bash
 source .venv-sol/bin/activate
 python -m pip install -e ".[research,quant,dev]"
+python -m pip install PyPcre
 python -m pip install -v --no-build-isolation gptqmodel
 ```
 

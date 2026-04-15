@@ -104,6 +104,13 @@ if [[ "${PEAGLE_SKIP_PIP_INSTALL:-0}" != "1" ]]; then
   python -m pip install -e "${PEAGLE_ROOT}[research,quant,dev]"
 
   if [[ "${PEAGLE_SKIP_GPTQMODEL_INSTALL:-0}" != "1" ]]; then
+    if ! python -c "import pcre" >/dev/null 2>&1; then
+      echo "Installing PyPcre dependency for gptqmodel..."
+      python -m pip install PyPcre
+    fi
+  fi
+
+  if [[ "${PEAGLE_SKIP_GPTQMODEL_INSTALL:-0}" != "1" ]]; then
     if ! python -c "import gptqmodel" >/dev/null 2>&1; then
       echo "Installing gptqmodel with --no-build-isolation for AWQ support..."
       if ! python -m pip install -v --no-build-isolation gptqmodel; then
@@ -111,9 +118,12 @@ if [[ "${PEAGLE_SKIP_PIP_INSTALL:-0}" != "1" ]]; then
 gptqmodel installation failed.
 
 This package must be installed without build isolation, and some clusters may also
-require Python development headers. Retry manually inside the venv:
+require Python development headers. It may also require the `PyPcre` package, which
+provides the `pcre` module imported by newer GPTQModel builds. Retry manually inside
+the venv:
 
   source "${PEAGLE_VENV}/bin/activate"
+  python -m pip install PyPcre
   python -m pip install -v --no-build-isolation gptqmodel
 
 If that still fails and mentions Python.h, ask the cluster admins whether Python
