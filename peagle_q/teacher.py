@@ -63,17 +63,19 @@ class TransformersTeacherRunner:
 
     def _load_model(self) -> Any:
         if self.quantization == "awq":
-            # Prefer the Transformers-native AWQ loader. It is slower than
-            # AutoAWQ's specialized path, but it is much more robust on
-            # shared clusters because it avoids Triton JIT compilation and
-            # Python development-header requirements during smoke/extract runs.
-            return AutoModelForCausalLM.from_pretrained(
+            # Prefer the Transformers-native AWQ loader. We intentionally
+            # avoid the low_cpu_mem_usage/device_map init path here because
+            # recent GPTQModel-backed AWQ integrations can execute module
+            # import-time scalar ops while the model is being built on the
+            # meta device, which crashes on some shared clusters.
+            awq_dtype = torch.float16 if self.device.startswith("cuda") else self.dtype
+            model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
                 revision=self.revision,
-                torch_dtype=self.dtype,
-                low_cpu_mem_usage=True,
-                device_map=self._resolve_device_map(),
+                torch_dtype=awq_dtype,
+                low_cpu_mem_usage=False,
             )
+            return model.to(self.device)
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_path,

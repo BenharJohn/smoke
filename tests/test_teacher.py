@@ -57,6 +57,6 @@ def test_awq_uses_transformers_native_loader(monkeypatch) -> None:
         dtype_name="float16",
     )
 
-    assert captured["device_map"] == "cuda:0"
     assert captured["torch_dtype"] == torch.float16
+    assert captured["low_cpu_mem_usage"] is False
     runner.close()
