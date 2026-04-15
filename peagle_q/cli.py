@@ -4,9 +4,13 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any
 
 from peagle_q.layers import parse_layer_indices, resolve_layer_indices
+
+
+_UNEXPANDED_ENV_PATTERN = re.compile(r"\$(\w+|\{[^}]+\})")
 
 
 def _expand_config_value(value: Any) -> Any:
@@ -23,7 +27,32 @@ def _load_config_file(path: str | None) -> dict[str, Any]:
     if not path:
         return {}
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    return _expand_config_value(payload)
+    expanded = _expand_config_value(payload)
+    unresolved: list[str] = []
+
+    def visit(value: Any, prefix: str) -> None:
+        if isinstance(value, str):
+            if _UNEXPANDED_ENV_PATTERN.search(value):
+                unresolved.append(f"{prefix}={value}")
+            return
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, f"{prefix}[{index}]")
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                child_prefix = f"{prefix}.{key}" if prefix else str(key)
+                visit(item, child_prefix)
+
+    visit(expanded, "")
+    if unresolved:
+        details = ", ".join(unresolved)
+        raise SystemExit(
+            "config contains unresolved environment variables; export them before running: "
+            f"{details}"
+        )
+
+    return expanded
 
 
 def _merge_config(config: dict[str, Any], namespace: argparse.Namespace) -> dict[str, Any]:
