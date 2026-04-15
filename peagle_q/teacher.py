@@ -92,6 +92,17 @@ class TransformersTeacherRunner:
         return self.quantization
 
     def _load_awq_model(self) -> Any:
+        # Disable autoawq's Triton GEMM backend before importing AutoAWQForCausalLM.
+        # Triton JIT-compiles CUDA utilities on first use, which requires Python.h
+        # (Python development headers).  These are often absent on HPC compute nodes.
+        # Setting AWQ_TRITON_AVAILABLE=False before the linear modules are imported
+        # forces autoawq to use its pre-compiled CUDA extension (awq_ext) instead.
+        try:
+            import awq.modules.triton.gemm as _awq_triton_mod
+            _awq_triton_mod.AWQ_TRITON_AVAILABLE = False
+        except Exception:
+            pass
+
         try:
             from awq import AutoAWQForCausalLM
         except ImportError as exc:
