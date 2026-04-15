@@ -1,0 +1,7 @@
+{
+  "teacher_model_path": "$PEAGLE_AWQ_MODEL",
+  "teacher_quantization": "awq",
+  "prompt": "Explain speculative decoding in three short bullet points, then explain in one sentence why quantization can change acceptance rates.",
+  "max_new_tokens": 64,
+  "device": "cuda"
+}
