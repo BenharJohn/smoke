@@ -67,13 +67,16 @@ submit_job() {
 
 echo "Submitting 1k pilot chain from ${ROOT}"
 
-SMOKE_JOB=$(submit_job "" "smoke" "${ROOT}/configs/sol/qwen3_8b_smoke.json" "01:00:00")
-echo "smoke: ${SMOKE_JOB}"
+BF16_SMOKE_JOB=$(submit_job "" "smoke" "${ROOT}/configs/sol/qwen3_8b_smoke.json" "01:00:00")
+echo "smoke_bf16: ${BF16_SMOKE_JOB}"
 
-BF16_EXTRACT_JOB=$(submit_job "${SMOKE_JOB}" "extract" "${ROOT}/configs/sol/qwen3_8b_extract_bf16_1k.json" "02:00:00")
+AWQ_SMOKE_JOB=$(submit_job "" "smoke" "${ROOT}/configs/sol/qwen3_8b_smoke_awq.json" "01:00:00")
+echo "smoke_awq: ${AWQ_SMOKE_JOB}"
+
+BF16_EXTRACT_JOB=$(submit_job "${BF16_SMOKE_JOB}" "extract" "${ROOT}/configs/sol/qwen3_8b_extract_bf16_1k.json" "02:00:00")
 echo "extract_bf16_1k: ${BF16_EXTRACT_JOB}"
 
-AWQ_EXTRACT_JOB=$(submit_job "${SMOKE_JOB}" "extract" "${ROOT}/configs/sol/qwen3_8b_extract_awq_1k.json" "02:00:00")
+AWQ_EXTRACT_JOB=$(submit_job "${AWQ_SMOKE_JOB}" "extract" "${ROOT}/configs/sol/qwen3_8b_extract_awq_1k.json" "02:00:00")
 echo "extract_awq_1k: ${AWQ_EXTRACT_JOB}"
 
 BF16_TRAIN_JOB=$(submit_job "${BF16_EXTRACT_JOB}" "train" "${ROOT}/configs/sol/qwen3_8b_train_bf16_1k.json" "04:00:00")
