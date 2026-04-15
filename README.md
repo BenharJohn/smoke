@@ -285,6 +285,8 @@ bash scripts/sol/setup_env.sh
 
 This creates `.venv-sol`, installs the research dependencies, and defaults large outputs to `$SCRATCH` when available.
 
+The quantized AWQ path also depends on `gptqmodel`, which is included by the `quant` extra installed by `setup_env.sh`.
+
 If your Sol environment already provides a suitable Python stack and you do not want the helper to run `pip install`, set:
 
 ```bash
@@ -317,6 +319,13 @@ AWQ extraction:
 sbatch --chdir=$PEAGLE_ROOT --gpus=1 --time=02:00:00 \
   --export=ALL,PEAGLE_COMMAND=extract,PEAGLE_CONFIG=$PEAGLE_ROOT/configs/sol/qwen3_8b_extract_awq_1k.json \
   $PEAGLE_ROOT/scripts/sol/run_peagle_job.slurm
+```
+
+If an existing `.venv-sol` was created before `gptqmodel` was added, refresh it with:
+
+```bash
+source .venv-sol/bin/activate
+python -m pip install -e ".[research,quant,dev]"
 ```
 
 BF16-control training:

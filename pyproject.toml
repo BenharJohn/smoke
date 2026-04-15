@@ -28,6 +28,7 @@ research = [
 ]
 quant = [
   "autoawq>=0.2.6",
+  "gptqmodel",
 ]
 serve = [
   "vllm>=0.6.0",

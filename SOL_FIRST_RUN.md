@@ -18,6 +18,13 @@ export PEAGLE_CACHE_ROOT=$PEAGLE_RUN_ROOT/cache
 bash $PEAGLE_ROOT/scripts/sol/setup_env.sh
 ```
 
+If AWQ later errors with `Loading an AWQ quantized model requires gptqmodel`, refresh the environment once with:
+
+```bash
+source $PEAGLE_ROOT/.venv-sol/bin/activate
+python -m pip install -e "$PEAGLE_ROOT[research,quant,dev]"
+```
+
 ## 2. Run smoke tests (BF16 and AWQ)
 
 ```bash
