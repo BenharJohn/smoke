@@ -56,18 +56,23 @@ class TransformersTeacherRunner:
         self.model = self._load_model()
         self.model.eval()
 
+    def _resolve_device_map(self) -> str | dict[str, str]:
+        if self.device.startswith("cuda"):
+            return "cuda:0" if self.device == "cuda" else self.device
+        return self.device
+
     def _load_model(self) -> Any:
         if self.quantization == "awq":
-            try:
-                from awq import AutoAWQForCausalLM
-            except ImportError as exc:
-                raise ImportError(
-                    "AWQ support requires `pip install -e .[quant]` or `pip install autoawq`."
-                ) from exc
-
-            return AutoAWQForCausalLM.from_quantized(
+            # Prefer the Transformers-native AWQ loader. It is slower than
+            # AutoAWQ's specialized path, but it is much more robust on
+            # shared clusters because it avoids Triton JIT compilation and
+            # Python development-header requirements during smoke/extract runs.
+            return AutoModelForCausalLM.from_pretrained(
                 self.model_path,
-                fuse_layers=False,
+                revision=self.revision,
+                torch_dtype=self.dtype,
+                low_cpu_mem_usage=True,
+                device_map=self._resolve_device_map(),
             )
 
         model = AutoModelForCausalLM.from_pretrained(
