@@ -23,6 +23,7 @@ If AWQ later errors with `Loading an AWQ quantized model requires gptqmodel`, re
 ```bash
 source $PEAGLE_ROOT/.venv-sol/bin/activate
 python -m pip install -e "$PEAGLE_ROOT[research,quant,dev]"
+python -m pip install -v --no-build-isolation gptqmodel
 ```
 
 ## 2. Run smoke tests (BF16 and AWQ)

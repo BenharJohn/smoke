@@ -102,6 +102,27 @@ source "${PEAGLE_VENV}/bin/activate"
 if [[ "${PEAGLE_SKIP_PIP_INSTALL:-0}" != "1" ]]; then
   python -m pip install --upgrade pip setuptools wheel
   python -m pip install -e "${PEAGLE_ROOT}[research,quant,dev]"
+
+  if [[ "${PEAGLE_SKIP_GPTQMODEL_INSTALL:-0}" != "1" ]]; then
+    if ! python -c "import gptqmodel" >/dev/null 2>&1; then
+      echo "Installing gptqmodel with --no-build-isolation for AWQ support..."
+      if ! python -m pip install -v --no-build-isolation gptqmodel; then
+        cat >&2 <<EOF
+gptqmodel installation failed.
+
+This package must be installed without build isolation, and some clusters may also
+require Python development headers. Retry manually inside the venv:
+
+  source "${PEAGLE_VENV}/bin/activate"
+  python -m pip install -v --no-build-isolation gptqmodel
+
+If that still fails and mentions Python.h, ask the cluster admins whether Python
+development headers are available on the node image or via a module.
+EOF
+        exit 1
+      fi
+    fi
+  fi
 fi
 
 cat <<EOF
