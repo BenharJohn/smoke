@@ -56,32 +56,52 @@ class TransformersTeacherRunner:
         self.model = self._load_model()
         self.model.eval()
 
-    def _resolve_device_map(self) -> str | dict[str, str]:
-        if self.device.startswith("cuda"):
-            return "cuda:0" if self.device == "cuda" else self.device
-        return self.device
-
     def _load_model(self) -> Any:
-        if self.quantization == "awq":
-            # Prefer the Transformers-native AWQ loader. We intentionally
-            # avoid the low_cpu_mem_usage/device_map init path here because
-            # recent GPTQModel-backed AWQ integrations can execute module
-            # import-time scalar ops while the model is being built on the
-            # meta device, which crashes on some shared clusters.
-            awq_dtype = torch.float16 if self.device.startswith("cuda") else self.dtype
-            model = AutoModelForCausalLM.from_pretrained(
-                self.model_path,
-                revision=self.revision,
-                torch_dtype=awq_dtype,
-                low_cpu_mem_usage=False,
-            )
-            return model.to(self.device)
+        quantization = self._resolve_quantization()
+
+        if quantization == "awq":
+            return self._load_awq_model()
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
             revision=self.revision,
             torch_dtype=self.dtype,
             low_cpu_mem_usage=True,
+        )
+        return model.to(self.device)
+
+    def _resolve_quantization(self) -> str:
+        if self.quantization != "none":
+            return self.quantization
+
+        try:
+            from transformers import AutoConfig
+
+            config = AutoConfig.from_pretrained(
+                self.model_path,
+                revision=self.revision,
+                trust_remote_code=False,
+            )
+            quant_config = getattr(config, "quantization_config", None)
+            if isinstance(quant_config, dict) and quant_config.get("quant_method") == "awq":
+                self.quantization = "awq"
+                return "awq"
+        except Exception:
+            pass
+
+        return self.quantization
+
+    def _load_awq_model(self) -> Any:
+        try:
+            from awq import AutoAWQForCausalLM
+        except ImportError as exc:
+            raise ImportError(
+                "AWQ support requires `pip install -e .[quant]` or `pip install autoawq`."
+            ) from exc
+
+        model = AutoAWQForCausalLM.from_quantized(
+            self.model_path,
+            fuse_layers=False,
         )
         return model.to(self.device)
 
@@ -192,9 +212,13 @@ class TransformersTeacherRunner:
         )
 
     def get_output_projection(self) -> tuple[torch.Tensor, torch.Tensor | None]:
-        if hasattr(self.model, "lm_head") and hasattr(self.model.lm_head, "weight"):
-            weight = self.model.lm_head.weight.detach().cpu().to(torch.float16)
-            bias = getattr(self.model.lm_head, "bias", None)
+        lm_head = getattr(self.model, "lm_head", None)
+        if lm_head is not None and hasattr(lm_head, "weight"):
+            weight = lm_head.weight
+            if hasattr(weight, "data"):
+                weight = weight.data
+            weight = weight.detach().cpu().to(torch.float16)
+            bias = getattr(lm_head, "bias", None)
             return weight, None if bias is None else bias.detach().cpu().to(torch.float16)
 
         embeddings = self.model.get_input_embeddings()
