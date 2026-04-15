@@ -50,6 +50,7 @@ norecursedirs = [
   ".tmp",
   ".vendor-smoke",
   ".venv-smoke",
+  "smoke-repo",
   "tests/tmp*",
   "tests/__pycache__",
 ]

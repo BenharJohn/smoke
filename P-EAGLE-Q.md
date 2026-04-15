@@ -298,6 +298,70 @@ The next paper revision should add these concrete artifacts:
 - A mechanism figure showing hidden-state drift or logit agreement alongside acceptance changes
 - A one-paragraph exactness statement confirming speculative outputs match the autoregressive verifier
 
+## Sol Pre-Flight Checklist
+
+Run through this checklist on Sol **before** submitting `submit_1k_pilot.sh`.
+
+### Environment variables
+
+```bash
+export PEAGLE_ROOT=/path/to/this/repo
+export PEAGLE_BF16_MODEL=Qwen/Qwen3-8B
+export PEAGLE_AWQ_MODEL=Qwen/Qwen3-8B-AWQ          # official 1.1M-download AWQ checkpoint
+export PEAGLE_DATASET=/path/to/sharegpt_or_other.jsonl
+export PEAGLE_RUN_ROOT=$SCRATCH/peagle-q/$USER
+export PEAGLE_BENCHMARK=$PEAGLE_ROOT/benchmarks/mini_mt_bench.jsonl
+export PEAGLE_CACHE_ROOT=$PEAGLE_RUN_ROOT/cache
+```
+
+### Step-by-step verification
+
+| # | Check | Command | Pass criteria |
+|---|-------|---------|---------------|
+| 1 | Build venv | `bash scripts/sol/setup_env.sh` | Prints "Environment ready" with correct paths |
+| 2 | Python version | `python3 --version` (inside venv) | >= 3.10 |
+| 3 | Core imports | `python3 -c "import peagle_q; import torch; print(torch.cuda.is_available())"` | `True` |
+| 4 | AWQ import | `python3 -c "from awq import AutoAWQForCausalLM; print('OK')"` | `OK` — if this fails, `pip install autoawq` in the venv |
+| 5 | Dataset exists | `wc -l $PEAGLE_DATASET` | >= 1000 lines |
+| 6 | Dataset valid | `head -1 $PEAGLE_DATASET \| python3 -m json.tool` | Parses as valid JSON with `conversations`, `messages`, or `prompt` key |
+| 7 | BF16 smoke | `bash scripts/sol/run_cli.sh smoke --config configs/sol/qwen3_8b_smoke.json` | JSON output with `hidden_state_shape` and `autoregressive.text` |
+| 8 | AWQ smoke | `bash scripts/sol/run_cli.sh smoke --config configs/sol/qwen3_8b_smoke_awq.json` | Same as above — confirms quantized model loads and generates |
+| 9 | Scratch space | `df -h $SCRATCH` | Enough free space for hidden-state dumps (~50 GB for 8k examples) |
+| 10 | Slurm access | `sinfo -p YOUR_PARTITION` | GPU partition is visible and has idle or mixed nodes |
+
+### Submit the full pipeline
+
+Once all 10 checks pass:
+
+```bash
+bash scripts/sol/submit_1k_pilot.sh --account YOUR_ACCOUNT --partition YOUR_PARTITION
+```
+
+This submits 8 chained jobs: BF16 smoke → AWQ smoke → parallel extractions → parallel training → 3 evaluation rows. Monitor with `squeue -u $USER`.
+
+### Expected outputs
+
+```
+$PEAGLE_RUN_ROOT/qwen3_8b/
+├── extract_bf16_1k/          # manifest.jsonl + tensors/
+├���─ extract_awq_1k/           # manifest.jsonl + tensors/
+├── train_bf16_1k/            # checkpoints/ + metrics.jsonl
+├── train_awq_1k/             # checkpoints/ + metrics.jsonl
+├── eval_bf16_on_bf16.json    # Row (a): upper bound
+├── eval_bf16_on_awq.json     # Row (b): shows the gap
+└── eval_awq_on_awq.json      # Row (c): our contribution
+```
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `ModuleNotFoundError: awq` | autoawq not installed in venv | `pip install autoawq` inside `.venv-sol` |
+| AWQ smoke hangs or OOMs | Model too large for node | Verify you're on an A100 80GB node, not A30 |
+| Extraction produces 0 tensors | `$PEAGLE_DATASET` path wrong or empty | Check `echo $PEAGLE_DATASET` and `wc -l` |
+| Training crashes on projection load | `lm_head` weight not found on AWQ model | Check Slurm `.err` file; may need `projection_model_path` pointing to BF16 model (already set in configs) |
+| Eval shows `tau: 0.0` | Draft checkpoint path wrong or empty | Verify `train_*/checkpoints/best.pt` exists |
+
 ## Anchor Sources
 
 - [P-EAGLE paper page](https://papers.cool/arxiv/2602.01469)

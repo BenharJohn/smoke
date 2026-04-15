@@ -128,11 +128,18 @@ Ready-made assets:
 - [extract_bigmodel_pilot_template.json](/f:/Research%20paper/configs/extract_bigmodel_pilot_template.json)
 - [train_bigmodel_smoke_template.json](/f:/Research%20paper/configs/train_bigmodel_smoke_template.json)
 - [run_bigmodel_first_steps.ps1](/f:/Research%20paper/scripts/run_bigmodel_first_steps.ps1)
+- [run_bigmodel_first_steps.sh](/f:/Research%20paper/scripts/run_bigmodel_first_steps.sh)
 
-Example usage on the bigger system:
+Example usage on Windows:
 
 ```powershell
 .\scripts\run_bigmodel_first_steps.ps1 -ModelPath "google/gemma-3-4b-it" -RunName "gemma4b"
+```
+
+Example usage on Linux / Slurm node:
+
+```bash
+bash ./scripts/run_bigmodel_first_steps.sh "google/gemma-3-4b-it" gemma4b
 ```
 
 That script will:
@@ -256,7 +263,7 @@ At minimum, export these before running the Sol scripts:
 ```bash
 export PEAGLE_ROOT=/path/to/this/repo
 export PEAGLE_BF16_MODEL=Qwen/Qwen3-8B
-export PEAGLE_AWQ_MODEL=/path/or/hf/id/of/your/qwen3-awq-checkpoint
+export PEAGLE_AWQ_MODEL=Qwen/Qwen3-8B-AWQ
 export PEAGLE_DATASET=/path/to/sharegpt_or_other_train.jsonl
 ```
 
@@ -277,22 +284,6 @@ bash scripts/sol/setup_env.sh
 ```
 
 This creates `.venv-sol`, installs the research dependencies, and defaults large outputs to `$SCRATCH` when available.
-
-The project requires `Python 3.10+`. If Sol's default `python3` is older, load a newer module first or point the helper at a specific interpreter:
-
-```bash
-module avail python
-module load python/3.10
-# or, if the binary is already on PATH:
-export PEAGLE_PYTHON_BIN=python3.10
-```
-
-If you already created `.venv-sol` with an older Python, remove it once after switching interpreters:
-
-```bash
-rm -rf $PEAGLE_ROOT/.venv-sol
-bash scripts/sol/setup_env.sh
-```
 
 If your Sol environment already provides a suitable Python stack and you do not want the helper to run `pip install`, set:
 
