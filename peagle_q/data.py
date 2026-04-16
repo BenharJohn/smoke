@@ -46,6 +46,8 @@ def normalize_sharegpt_messages(record: dict[str, Any]) -> list[dict[str, str]]:
             source_role = str(item["from"]).strip().lower()
             role = role_map.get(source_role, source_role)
             messages.append({"role": role, "content": str(item["value"])})
+        if not messages:
+            raise ValueError("record has empty conversations list")
         return messages
 
     raise ValueError("record does not contain messages or conversations")

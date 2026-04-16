@@ -95,7 +95,10 @@ def extract_hidden_states(config: ExtractRunConfig) -> dict[str, Any]:
         if config.max_examples is not None and processed >= config.max_examples:
             break
 
-        prompt_text = build_training_prompt(record, teacher.tokenizer)
+        try:
+            prompt_text = build_training_prompt(record, teacher.tokenizer)
+        except (ValueError, IndexError):
+            continue
         prompt_hash = prompt_sha256(prompt_text)
         teacher_output = teacher.forward_prompt(
             prompt_text,
