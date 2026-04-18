@@ -153,18 +153,29 @@ echo "export PEAGLE_DATASET=\$PEAGLE_RUN_ROOT/train_1k.jsonl" >> ~/.bashrc
 > `PEAGLE_DATASET` must point to a **file**, not a directory. If it points to a
 > directory the loader silently iterates nothing and extraction produces 0 rows.
 
+## Sol account / partition (bjohn10)
+
+| Field | Value |
+|-------|-------|
+| `--account` | `class_cse57388551fall2025` |
+| `--partition` | `public` |
+| `--qos` | `class` |
+
+> GPU nodes on `public`: A100 (×4), A30 (×3), MIG slices. Max wall time 7 days.
+> `htc` partition is also available but capped at 4h — too short for train jobs.
+
 ## 5. Run smoke tests (BF16 and AWQ)
 
 ```bash
 # BF16 smoke
 sbatch --chdir=$PEAGLE_ROOT --gpus=1 --time=01:00:00 \
-  --account=YOUR_ACCOUNT --partition=YOUR_PARTITION \
+  --account=class_cse57388551fall2025 --partition=public --qos=class \
   --export=ALL,PEAGLE_COMMAND=smoke,PEAGLE_CONFIG=$PEAGLE_ROOT/configs/sol/qwen3_8b_smoke.json \
   $PEAGLE_ROOT/scripts/sol/run_peagle_job.slurm
 
 # AWQ smoke — verifies the quantized model loads and generates correctly
 sbatch --chdir=$PEAGLE_ROOT --gpus=1 --time=01:00:00 \
-  --account=YOUR_ACCOUNT --partition=YOUR_PARTITION \
+  --account=class_cse57388551fall2025 --partition=public --qos=class \
   --export=ALL,PEAGLE_COMMAND=smoke,PEAGLE_CONFIG=$PEAGLE_ROOT/configs/sol/qwen3_8b_smoke_awq.json \
   $PEAGLE_ROOT/scripts/sol/run_peagle_job.slurm
 ```
@@ -174,7 +185,8 @@ Check the job output for `"status": "ok"` to confirm success.
 ## 6. Submit the full 1k pilot chain
 
 ```bash
-bash $PEAGLE_ROOT/scripts/sol/submit_1k_pilot.sh --account YOUR_ACCOUNT --partition YOUR_PARTITION
+bash $PEAGLE_ROOT/scripts/sol/submit_1k_pilot.sh \
+  --account class_cse57388551fall2025 --partition public --qos class
 ```
 
 ## 7. Check outputs
@@ -210,10 +222,11 @@ cat $PEAGLE_RUN_ROOT/qwen3_8b/eval_awq_on_awq.json
 
 For the 1 k pilot numbers shown above, use `theoretical_speedup_ideal` (= τ + 1) as the drafter-quality metric; the new 8 k eval configs (`qwen3_8b_eval_*_8k.json`) default to `speculation_mode: "both"` and will produce real speedup figures.
 
-## 9. If you want the 8k step next
+## 9. Submit the 8k matrix
 
 ```bash
-ls $PEAGLE_ROOT/configs/sol/*8k.json
+bash $PEAGLE_ROOT/scripts/sol/submit_8k_matrix.sh \
+  --account class_cse57388551fall2025 --partition public --qos class
 ```
 
 ---
