@@ -1,5 +1,9 @@
 # Sol Branch Workflow
 
+**Git repo**: `https://github.com/BenharJohn/smoke.git`
+On Sol the clone lives at `/home/bjohn10/smoke`.
+Push from your local machine → on Sol run `bootstrap_branch.sh YOUR_BRANCH` to pull.
+
 ## 1. Move the Sol checkout onto your branch
 
 ```bash
