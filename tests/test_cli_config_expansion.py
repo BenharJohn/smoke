@@ -27,10 +27,15 @@ def test_expand_config_value_recurses_through_nested_values(monkeypatch) -> None
     }
 
 
-def test_load_config_file_fails_clearly_on_unresolved_env_var() -> None:
+def test_load_config_file_fails_clearly_on_unresolved_env_var(monkeypatch) -> None:
+    # Use a sentinel name unlikely to exist in the environment, and defensively
+    # delete it if a prior run/CI leaked it. On Sol real jobs export PEAGLE_*
+    # variables, which would spuriously resolve the placeholder in the original
+    # test and cause a false negative.
+    monkeypatch.delenv("PEAGLE_UNSET_FOR_TEST_XYZ", raising=False)
     config_path = Path("tests/_config_unresolved_env.json")
     config_path.write_text(
-        json.dumps({"dataset": "$PEAGLE_DATASET", "output_dir": "runs/out"}),
+        json.dumps({"dataset": "$PEAGLE_UNSET_FOR_TEST_XYZ", "output_dir": "runs/out"}),
         encoding="utf-8",
     )
     try:
