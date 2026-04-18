@@ -1,0 +1,8 @@
+{
+  "_note": "TODO: set PEAGLE_W8A8_MODEL once an llm-compressor W8A8 Qwen3-8B checkpoint exists on Sol. Expect a compressed-tensors quantization_config with W8A8 weight/activation schemes.",
+  "teacher_model_path": "$PEAGLE_W8A8_MODEL",
+  "teacher_quantization": "w8a8",
+  "prompt": "Explain speculative decoding in three short bullet points, then explain in one sentence why quantization can change acceptance rates.",
+  "max_new_tokens": 64,
+  "device": "cuda"
+}

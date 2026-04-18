@@ -1,0 +1,13 @@
+{
+  "_note": "H1 null cell at 8k: AWQ-trained drafter on AWQ verifier. Together with eval_bf16_on_bf16_8k.json and eval_bf16_on_awq_8k.json this completes the W4A16 row of the 8k regime matrix.",
+  "benchmark_path": "$PEAGLE_BENCHMARK",
+  "verifier_model_path": "$PEAGLE_AWQ_MODEL",
+  "verifier_quantization": "awq",
+  "draft_checkpoint": "$PEAGLE_RUN_ROOT/qwen3_8b/train_awq_8k/checkpoints/best.pt",
+  "output_path": "$PEAGLE_RUN_ROOT/qwen3_8b/eval_awq_on_awq_8k.json",
+  "draft_length": 5,
+  "max_new_tokens": 128,
+  "temperature": 0.0,
+  "device": "cuda",
+  "speculation_mode": "both"
+}

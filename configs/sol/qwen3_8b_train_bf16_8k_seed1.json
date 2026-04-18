@@ -1,6 +1,6 @@
 {
-  "manifest": "$PEAGLE_RUN_ROOT/qwen3_8b/extract_awq_8k/manifest.jsonl",
-  "output_dir": "$PEAGLE_RUN_ROOT/qwen3_8b/train_awq_8k",
+  "manifest": "$PEAGLE_RUN_ROOT/qwen3_8b/extract_bf16_8k/manifest.jsonl",
+  "output_dir": "$PEAGLE_RUN_ROOT/qwen3_8b/train_bf16_8k_seed1",
   "projection_model_path": "$PEAGLE_BF16_MODEL",
   "projection_quantization": "none",
   "epochs": 5,
@@ -11,5 +11,5 @@
   "checkpoint_every": 500,
   "max_length": 2048,
   "device": "cuda",
-  "seed": 42
+  "seed": 1
 }

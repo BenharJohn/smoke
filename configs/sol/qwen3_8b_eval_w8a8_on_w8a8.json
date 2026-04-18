@@ -1,0 +1,13 @@
+{
+  "_note": "H3 recovery cell: W8A8-aware drafter evaluated on the W8A8 verifier. Only run if the bf16_on_w8a8 row confirmed the gap predicted by H2. speculation_mode=both reports matched-control tau/alpha (sequential) and real speedup (parallel) in one run.",
+  "benchmark_path": "$PEAGLE_BENCHMARK",
+  "verifier_model_path": "$PEAGLE_W8A8_MODEL",
+  "verifier_quantization": "w8a8",
+  "draft_checkpoint": "$PEAGLE_RUN_ROOT/qwen3_8b/train_w8a8_8k/checkpoints/best.pt",
+  "output_path": "$PEAGLE_RUN_ROOT/qwen3_8b/eval_w8a8_on_w8a8.json",
+  "draft_length": 5,
+  "max_new_tokens": 128,
+  "temperature": 0.0,
+  "device": "cuda",
+  "speculation_mode": "both"
+}

@@ -15,6 +15,7 @@ class TeacherOutput:
     attention_mask: torch.Tensor
     logits: torch.Tensor | None
     selected_hidden_states: torch.Tensor | None
+    past_key_values: Any | None = None
 
 
 def infer_device(device: str | None = None) -> str:
@@ -62,6 +63,9 @@ class TransformersTeacherRunner:
         if quantization == "awq":
             return self._load_awq_model()
 
+        if quantization == "w8a8":
+            return self._load_compressed_tensors_model()
+
         model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
             revision=self.revision,
@@ -83,13 +87,27 @@ class TransformersTeacherRunner:
                 trust_remote_code=False,
             )
             quant_config = getattr(config, "quantization_config", None)
-            if isinstance(quant_config, dict) and quant_config.get("quant_method") == "awq":
-                self.quantization = "awq"
-                return "awq"
+            if isinstance(quant_config, dict):
+                method = quant_config.get("quant_method")
+                if method == "awq":
+                    self.quantization = "awq"
+                    return "awq"
+                if method == "compressed-tensors":
+                    self.quantization = "w8a8"
+                    return "w8a8"
         except Exception:
             pass
 
         return self.quantization
+
+    def _load_compressed_tensors_model(self) -> Any:
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_path,
+            revision=self.revision,
+            torch_dtype=self.dtype,
+            low_cpu_mem_usage=True,
+        )
+        return model.to(self.device)
 
     def _load_awq_model(self) -> Any:
         # Disable autoawq's Triton GEMM backend before importing AutoAWQForCausalLM.
@@ -102,6 +120,7 @@ class TransformersTeacherRunner:
             _awq_triton_mod.AWQ_TRITON_AVAILABLE = False
         except Exception:
             pass
+
 
         try:
             from awq import AutoAWQForCausalLM
@@ -169,6 +188,9 @@ class TransformersTeacherRunner:
         attention_mask: torch.Tensor | None = None,
         layer_indices: list[int] | None = None,
         logits_mode: str = "full",
+        past_key_values: Any | None = None,
+        use_cache: bool = False,
+        hidden_states_on_device: bool = False,
     ) -> TeacherOutput:
         if isinstance(input_ids, list):
             input_ids = torch.tensor([input_ids], dtype=torch.long, device=self.device)
@@ -184,20 +206,27 @@ class TransformersTeacherRunner:
         else:
             attention_mask = attention_mask.to(self.device)
 
+        model_kwargs: dict[str, Any] = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "output_hidden_states": layer_indices is not None,
+            "return_dict": True,
+        }
+        if past_key_values is not None:
+            model_kwargs["past_key_values"] = past_key_values
+        if use_cache:
+            model_kwargs["use_cache"] = True
+
         with torch.no_grad():
-            outputs = self.model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                output_hidden_states=layer_indices is not None,
-                return_dict=True,
-            )
+            outputs = self.model(**model_kwargs)
 
         logits: torch.Tensor | None
         if logits_mode == "none":
             logits = None
         elif logits_mode == "last":
             logits = outputs.logits[:, -1:, :].detach()
-        elif logits_mode == "full":
+        elif logits_mode == "full" or logits_mode == "all":
+            # `all` is an alias of `full`; kept for readability at parallel-speculative call sites.
             logits = outputs.logits.detach()
         else:
             raise ValueError(f"unsupported logits_mode: {logits_mode}")
@@ -209,17 +238,22 @@ class TransformersTeacherRunner:
                 raise RuntimeError("teacher model did not return hidden states")
             selected_hidden_states = torch.stack(
                 [
-                    hidden_states[layer_index + 1][0].detach().to(torch.float16).cpu()
+                    hidden_states[layer_index + 1][0].detach().to(self.dtype)
                     for layer_index in layer_indices
                 ],
                 dim=0,
             )
+            if not hidden_states_on_device:
+                selected_hidden_states = selected_hidden_states.cpu()
+
+        returned_cache = getattr(outputs, "past_key_values", None) if use_cache else None
 
         return TeacherOutput(
             input_ids=input_ids.detach().cpu(),
             attention_mask=attention_mask.detach().cpu(),
             logits=logits,
             selected_hidden_states=selected_hidden_states,
+            past_key_values=returned_cache,
         )
 
     def get_output_projection(self) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -250,3 +284,54 @@ def save_json(path: str | Path, payload: dict[str, Any]) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def trim_kv_cache(cache: Any, target_length: int) -> Any:
+    """Trim a HuggingFace KV cache to exactly ``target_length`` positions.
+
+    Supports the two cache container shapes that ``transformers`` produces
+    across supported versions:
+
+    * Legacy tuple-of-tuples: ``((k0, v0), (k1, v1), ...)`` where each tensor
+      has shape ``[batch, heads, seq, head_dim]``.
+    * ``DynamicCache`` (object with ``key_cache``/``value_cache`` lists or a
+      ``crop`` method).
+
+    Raises :class:`RuntimeError` if the cache type is unrecognised so that
+    parallel speculative decoding fails loudly rather than silently producing
+    wrong outputs.
+    """
+    if cache is None:
+        return None
+    if target_length < 0:
+        raise ValueError(f"target_length must be non-negative, got {target_length}")
+
+    # Preferred: DynamicCache-style object with an explicit crop hook.
+    crop = getattr(cache, "crop", None)
+    if callable(crop):
+        crop(target_length)
+        return cache
+
+    key_cache = getattr(cache, "key_cache", None)
+    value_cache = getattr(cache, "value_cache", None)
+    if isinstance(key_cache, list) and isinstance(value_cache, list):
+        for index, key_tensor in enumerate(key_cache):
+            if key_tensor is None:
+                continue
+            key_cache[index] = key_tensor[..., :target_length, :]
+        for index, value_tensor in enumerate(value_cache):
+            if value_tensor is None:
+                continue
+            value_cache[index] = value_tensor[..., :target_length, :]
+        seen_tokens = getattr(cache, "_seen_tokens", None)
+        if seen_tokens is not None:
+            cache._seen_tokens = min(int(seen_tokens), target_length)
+        return cache
+
+    if isinstance(cache, tuple):
+        return tuple(
+            (key[..., :target_length, :], value[..., :target_length, :])
+            for key, value in cache
+        )
+
+    raise RuntimeError(f"unsupported past_key_values container: {type(cache)!r}")

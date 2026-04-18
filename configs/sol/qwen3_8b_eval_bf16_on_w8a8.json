@@ -1,0 +1,13 @@
+{
+  "_note": "H2 test cell: BF16-trained drafter evaluated on a W8A8 verifier. If α[0] drops >=5 points vs bf16_on_bf16, H2 is supported and we run qwen3_8b_eval_w8a8_on_w8a8.json next. speculation_mode=both reports matched-control tau/alpha (sequential path) and real latency/speedup (parallel path) in one run.",
+  "benchmark_path": "$PEAGLE_BENCHMARK",
+  "verifier_model_path": "$PEAGLE_W8A8_MODEL",
+  "verifier_quantization": "w8a8",
+  "draft_checkpoint": "$PEAGLE_RUN_ROOT/qwen3_8b/train_bf16_8k/checkpoints/best.pt",
+  "output_path": "$PEAGLE_RUN_ROOT/qwen3_8b/eval_bf16_on_w8a8.json",
+  "draft_length": 5,
+  "max_new_tokens": 128,
+  "temperature": 0.0,
+  "device": "cuda",
+  "speculation_mode": "both"
+}

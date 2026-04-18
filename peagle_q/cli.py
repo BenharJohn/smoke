@@ -84,7 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_config_flag(extract)
     extract.add_argument("--dataset", type=str)
     extract.add_argument("--teacher-model-path", type=str)
-    extract.add_argument("--teacher-quantization", type=str, choices=["none", "awq"])
+    extract.add_argument("--teacher-quantization", type=str, choices=["none", "awq", "w8a8"])
     extract.add_argument("--teacher-revision", type=str)
     extract.add_argument("--output-dir", type=str)
     extract.add_argument("--layer-indices", type=str, help="Comma-separated layer indices.")
@@ -99,7 +99,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--manifest", type=str)
     train.add_argument("--output-dir", type=str)
     train.add_argument("--projection-model-path", type=str)
-    train.add_argument("--projection-quantization", type=str, choices=["none", "awq"])
+    train.add_argument("--projection-quantization", type=str, choices=["none", "awq", "w8a8"])
     train.add_argument("--projection-revision", type=str)
     train.add_argument("--resume-from", type=str)
     train.add_argument("--epochs", type=int)
@@ -115,12 +115,13 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--num-workers", type=int)
     train.add_argument("--device", type=str)
     train.add_argument("--dtype", type=str, choices=["float16", "float32", "bfloat16"])
+    train.add_argument("--seed", type=int)
 
     evaluate = subparsers.add_parser("evaluate", help="Evaluate a draft head on an MT-Bench style file.")
     _add_common_config_flag(evaluate)
     evaluate.add_argument("--benchmark-path", type=str)
     evaluate.add_argument("--verifier-model-path", type=str)
-    evaluate.add_argument("--verifier-quantization", type=str, choices=["none", "awq"])
+    evaluate.add_argument("--verifier-quantization", type=str, choices=["none", "awq", "w8a8"])
     evaluate.add_argument("--verifier-revision", type=str)
     evaluate.add_argument("--draft-checkpoint", type=str)
     evaluate.add_argument("--output-path", type=str)
@@ -129,11 +130,34 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--max-new-tokens", type=int)
     evaluate.add_argument("--temperature", type=float)
     evaluate.add_argument("--device", type=str)
+    evaluate.add_argument(
+        "--speculation-mode",
+        type=str,
+        choices=["sequential", "parallel", "both"],
+        help=(
+            "sequential = legacy KV-cached eval (one verifier pass per draft position); "
+            "parallel = real speculative decoding with K proposals verified in one pass; "
+            "both = run each prompt through both paths for matched-control comparison."
+        ),
+    )
+
+    diagnose = subparsers.add_parser(
+        "diagnose",
+        help="Compute per-layer drift diagnostics between two extraction manifests.",
+    )
+    _add_common_config_flag(diagnose)
+    diagnose.add_argument("--manifest-a", type=str)
+    diagnose.add_argument("--manifest-b", type=str)
+    diagnose.add_argument("--output-path", type=str)
+    diagnose.add_argument("--max-examples", type=int)
+    diagnose.add_argument("--max-length", type=int)
+    diagnose.add_argument("--label-a", type=str)
+    diagnose.add_argument("--label-b", type=str)
 
     smoke = subparsers.add_parser("smoke", help="Run a one-prompt model and draft sanity check.")
     _add_common_config_flag(smoke)
     smoke.add_argument("--teacher-model-path", type=str)
-    smoke.add_argument("--teacher-quantization", type=str, choices=["none", "awq"])
+    smoke.add_argument("--teacher-quantization", type=str, choices=["none", "awq", "w8a8"])
     smoke.add_argument("--teacher-revision", type=str)
     smoke.add_argument("--prompt", type=str, default="Explain speculative decoding in two sentences.")
     smoke.add_argument("--layer-indices", type=str)
@@ -192,6 +216,7 @@ def run_train(namespace: argparse.Namespace) -> None:
         num_workers=payload.get("num_workers") or 0,
         device=payload.get("device"),
         dtype=payload.get("dtype") or "float16",
+        seed=payload.get("seed") if payload.get("seed") is not None else 42,
     )
     summary = train_draft_head(config)
     print(json.dumps(summary, indent=2))
@@ -217,8 +242,27 @@ def run_evaluate(namespace: argparse.Namespace) -> None:
         max_new_tokens=payload.get("max_new_tokens") or 128,
         temperature=payload.get("temperature") or 0.0,
         device=payload.get("device"),
+        speculation_mode=payload.get("speculation_mode") or "sequential",
     )
     summary = evaluate_mt_bench(config)
+    print(json.dumps(summary, indent=2))
+
+
+def run_diagnose(namespace: argparse.Namespace) -> None:
+    from peagle_q.diagnostics import DiagnoseConfig, compute_layer_diagnostics
+
+    payload = _merge_config(_load_config_file(namespace.config), namespace)
+    _require_fields(payload, ["manifest_a", "manifest_b", "output_path"])
+    config = DiagnoseConfig(
+        manifest_a=payload["manifest_a"],
+        manifest_b=payload["manifest_b"],
+        output_path=payload["output_path"],
+        max_examples=payload.get("max_examples"),
+        max_length=payload.get("max_length") or 2048,
+        label_a=payload.get("label_a") or "teacher_a",
+        label_b=payload.get("label_b") or "teacher_b",
+    )
+    summary = compute_layer_diagnostics(config)
     print(json.dumps(summary, indent=2))
 
 
@@ -309,6 +353,9 @@ def main() -> None:
         return
     if namespace.command == "evaluate":
         run_evaluate(namespace)
+        return
+    if namespace.command == "diagnose":
+        run_diagnose(namespace)
         return
     if namespace.command == "smoke":
         run_smoke(namespace)

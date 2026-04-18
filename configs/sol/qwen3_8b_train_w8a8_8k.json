@@ -1,0 +1,16 @@
+{
+  "_note": "TODO: run after qwen3_8b_extract_w8a8_8k.json completes. projection_model_path stays on BF16 because lm_head weights are reused from the unquantized checkpoint.",
+  "manifest": "$PEAGLE_RUN_ROOT/qwen3_8b/extract_w8a8_8k/manifest.jsonl",
+  "output_dir": "$PEAGLE_RUN_ROOT/qwen3_8b/train_w8a8_8k",
+  "projection_model_path": "$PEAGLE_BF16_MODEL",
+  "projection_quantization": "none",
+  "epochs": 5,
+  "max_examples": 8000,
+  "batch_size": 1,
+  "grad_accum_steps": 4,
+  "learning_rate": 0.0001,
+  "checkpoint_every": 500,
+  "max_length": 2048,
+  "device": "cuda",
+  "seed": 42
+}

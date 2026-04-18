@@ -1,0 +1,10 @@
+{
+  "_note": "Mechanism diagnostic comparing BF16 and AWQ teacher hidden states on the 8k extraction. Supports H4: per-layer CKA should correlate with per-cell acceptance deltas. Run after both 8k extractions complete.",
+  "manifest_a": "$PEAGLE_RUN_ROOT/qwen3_8b/extract_bf16_8k/manifest.jsonl",
+  "manifest_b": "$PEAGLE_RUN_ROOT/qwen3_8b/extract_awq_8k/manifest.jsonl",
+  "output_path": "$PEAGLE_RUN_ROOT/qwen3_8b/diagnose_bf16_vs_awq.json",
+  "max_examples": 1000,
+  "max_length": 2048,
+  "label_a": "bf16",
+  "label_b": "awq_w4a16"
+}

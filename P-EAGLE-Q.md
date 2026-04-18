@@ -1,271 +1,219 @@
-# P-EAGLE-Q: Quantization-Aware Draft Training as a Defensible Research Proposal
+# P-EAGLE-Q: A Characterization Study of Quantization Mismatch in EAGLE-Style Speculative Decoding
 
-_Last updated: April 9, 2026_
+_Last updated: April 16, 2026_
 
-This draft is intentionally narrower than the original concept note. It is written to survive reviewer scrutiny before any strong novelty or mechanism claim is made.
+This revision replaces the earlier "recovery-only" framing. The pilot data at 1k training examples falsified the original H1 for W4A16 weight-only quantization, so the paper now asks a sharper and more general question: **under which quantization regimes does train-vs-inference mismatch actually hurt EAGLE-style speculative decoding, and when quantization-aware draft training helps, how much of the gap does it close?**
 
 ## Evidence Tags
 
 Use the following tags consistently throughout the paper draft:
 
-- **Observed**: directly stated in a cited paper, repository, release note, pull request, or reproducible experiment.
+- **Observed**: directly stated in a cited paper, repository, release note, pull request, or a reproducible experiment from this project.
 - **Inferred**: a conclusion drawn from observed facts, but not directly stated by a source.
 - **Hypothesized**: a claim that still requires experiments.
 
+## 0. Current Status (April 16, 2026)
+
+### 0.1 Pilot Results at 1k Training Examples
+
+The three Qwen3-8B rows from the 1k pilot:
+
+| Row | Drafter trained on | Verifier | τ | α[0] | α[1] | α[4] |
+| --- | --- | --- | --- | --- | --- | --- |
+| (a) BF16 → BF16 | BF16 teacher | BF16 | 1.648 | 0.663 | 0.395 | 0.113 |
+| (b) BF16 → AWQ W4A16 | BF16 teacher | AWQ W4A16 | 1.645 | 0.667 | 0.400 | 0.116 |
+| (c) AWQ → AWQ W4A16 | AWQ W4A16 teacher | AWQ W4A16 | 1.627 | 0.666 | 0.392 | 0.114 |
+
+- **Observed**: Row (a) and row (b) differ by less than 1.3% on τ and less than 0.5 percentage points on α[0]. The BF16-trained drafter does **not** degrade on the W4A16 verifier.
+- **Observed**: Row (c) performs within noise of row (b). The quantization-aware drafter does not improve on the BF16-trained control for this regime.
+- **Inferred**: Weight-only quantization (W4A16) does not introduce measurable drafter-facing distribution shift, because drafter tap-layer outputs remain in FP16/BF16 on both sides of the pipeline.
+- **Inferred**: The original "recovery" framing cannot be supported by these results. The paper needs a different thesis.
+
+### 0.2 Known Implementation Issues
+
+- **Observed (April 16, 2026)**: Several correctness issues were fixed before the 8k chain: unresolved `$VAR` config expansion now raises, cosine decay replaces a flat-after-warmup LR, teacher hidden-state dtype is no longer silently cast to FP16, `strict=True` and `weights_only=True` are enforced on checkpoint load, and a `seed` field is plumbed through `TrainRunConfig`.
+- **Resolved (April 17, 2026)**: The speculative evaluator in `peagle_q/eval.py` has been restructured into two paths controlled by `speculation_mode` on `EvaluationConfig`:
+  - `sequential` — KV-cached, 2 verifier forwards per speculative step. This is the matched-control path for τ/α and is the default for the 1 k pilot configs.
+  - `parallel` — real parallel-verification speculative decoding. The draft head produces K tokens autoregressively via `Eagle3StyleDraftHead.propose_sequence` (self-feeding the draft's own output hidden across the tap axis in lieu of per-position verifier hiddens), then the verifier verifies all K in a single forward plus one tip-extension forward. This path produces meaningful `tokens_per_second` and `speedup_vs_ar`.
+  - `both` — run each prompt through both paths in one evaluator pass and write a `by_mode` section in the summary; recommended for the 8 k matrix. Cross-path `τ` comparison also quantifies the acceptance cost of the self-feeding approximation.
+- **Inferred**: The 1 k pilot τ/α numbers stand unchanged (accept/reject counts are not affected by the timing fix). `speedup_vs_ar` values in the 1 k JSONs remain uninterpretable, but new 8 k eval configs default to `speculation_mode: "both"`, which writes real speedup figures.
+
+### 0.3 What This Status Tells Us
+
+- **Inferred**: The pilot has produced a genuine scientific finding (the "W4A16 null cell"). It is just not the finding the original plan predicted.
+- **Inferred**: The correct move is to widen the study to other quantization regimes where activations or the KV cache are quantized, which is where drafter-facing drift should theoretically appear.
+
 ## 1. Scoped Position
 
-- **Observed**: As of April 9, 2026, the anchor sources listed below do not clearly document an EAGLE-style drafter trained on hidden states or logits extracted from a quantized verifier.
-- **Observed**: Public sources do document all of the adjacent pieces separately: draft training, speculative decoding with quantized verifiers, and mixed quantized-verifier plus unquantized-drafter inference.
-- **Inferred**: There is a concrete gap between "quantized speculative inference is supported" and "quantized-teacher draft training is publicly documented."
-- **Hypothesized**: Retraining a drafter against the quantized verifier can recover acceptance or latency lost from train/inference precision mismatch, without adding new inference-time stages or parameters.
+- **Observed**: The existing literature documents EAGLE-style draft training and quantized speculative inference as separate topics, and documents specific failure modes in mixed precision deployments (SpecMQuant, vLLM PR #25883).
+- **Observed**: The 1k Qwen3-8B pilot in this project shows that W4A16 (AWQ) is not a regime in which EAGLE-style acceptance degrades.
+- **Inferred**: The open question is not "does quantization hurt speculative decoding," which is too broad, nor "does QAT draft training recover W4A16 loss," which our own data rules out. The open question is **where the mismatch actually lives and what, if anything, recovers it.**
 
-This is the claim the paper should make in v1:
+This is the claim the paper should make in v2:
 
-> Quantization-aware draft training is a testable way to recover speculative decoding performance on quantized verifiers, and current public evidence does not yet show that this training path has been documented end to end.
+> Quantization-induced acceptance loss in EAGLE-style speculative decoding is not uniform across quantization regimes. Weight-only regimes (W4A16) do not measurably hurt acceptance on a matched benchmark. Activation-quantized regimes (W8A8, FP8 all-quantized, KV4 cache) are the cells where mismatch should appear, and are therefore the cells where quantization-aware draft training can be tested as a recovery method.
 
-This is the claim the paper should **not** make yet:
+This is the claim the paper should **not** make:
 
-> "The gap is genuinely open" after an exhaustive review of the literature.
+> "Quantization-aware draft training universally improves speculative decoding on quantized verifiers."
 
-That stronger claim should only appear after the draft includes a dated search protocol, explicit inclusion and exclusion criteria, and a source table that lets another reader reproduce the novelty audit.
+That form of the claim is already falsified by the 1k pilot for the W4A16 cell.
 
 ## 2. Anchor Evidence Snapshot
 
-The table below is a dated evidence snapshot, not a final literature appendix. A source counts as a positive example only if it explicitly states, or its training code clearly documents, that the drafter was trained on hidden states or logits from a quantized verifier.
+The table below is a dated snapshot, not a final literature appendix.
 
-| Source | Dated fact | What it directly supports | Trained on quantized teacher? |
+| Source | Dated fact | What it directly supports | Relevant cell |
 | --- | --- | --- | --- |
-| [P-EAGLE paper page](https://papers.cool/arxiv/2602.01469) | Published February 1, 2026 UTC on the linked paper page | Parallel-drafting EAGLE training exists at scale | **No public evidence in this source** |
-| [SpecMQuant / CoRR abs/2505.22179](https://dblp.org/rec/journals/corr/abs-2505-22179.html) | 2025 CoRR record for the quantization plus speculative decoding paper | Quantized speculative decoding compatibility is a real problem; hierarchical inference is proposed | **No public evidence in this source** |
-| [vLLM Speculators repository](https://github.com/vllm-project/speculators) | Accessed April 9, 2026 | Offline hidden-state generation, draft training, and deployment tooling exist in one stack | **Unclear in public docs; no explicit quantized-teacher example surfaced** |
-| [vLLM PR #25883](https://github.com/vllm-project/vllm/pull/25883) | Merged September 29, 2025 | Quantized verifier plus unquantized drafter inference is a supported and tested scenario worth fixing | **No; inference-only bug fix** |
+| [P-EAGLE paper page](https://papers.cool/arxiv/2602.01469) | Published February 1, 2026 UTC | Parallel-drafting EAGLE training exists at scale | Baseline drafter architecture |
+| [SpecMQuant / CoRR abs/2505.22179](https://dblp.org/rec/journals/corr/abs-2505-22179.html) | 2025 CoRR record | Quantized speculative decoding compatibility is a real problem; hierarchical inference proposed | Activation-quantized cells |
+| [vLLM Speculators repository](https://github.com/vllm-project/speculators) | Accessed April 9, 2026 | Offline hidden-state generation, draft training, deployment tooling in one stack | Infrastructure |
+| [vLLM PR #25883](https://github.com/vllm-project/vllm/pull/25883) | Merged September 29, 2025 | Quantized-verifier + unquantized-drafter inference is a supported scenario | W4A16 cell |
+| [llm-compressor](https://github.com/vllm-project/llm-compressor) | Accessed April 16, 2026 | Public implementation of W8A8, W4A8, FP8 quantization recipes | Activation-quantized cells |
+| [KIVI / KV-quant literature](https://arxiv.org/abs/2402.02750) | 2024 | KV-cache quantization introduces activation-path drift | KV-quant cells |
 
-Working conclusion from the current evidence snapshot:
-
-- **Observed**: The anchor sources support the existence of draft training infrastructure and quantized-verifier inference support.
-- **Inferred**: The anchor sources do not yet provide a clean positive example of quantized-teacher draft training.
-- **Inferred**: The novelty claim is currently best phrased as a provisional literature finding, not a final exhaustive-review statement.
+- **Observed**: Anchor sources support the infrastructure and the W4A16 inference scenario.
+- **Inferred**: No anchor source has published a dated end-to-end table of drafter acceptance across (W4A16, W8A8, KV4, FP8) with a matched-control protocol on a single drafter family.
+- **Inferred**: This is where the paper's contribution can sit honestly, without claiming the literature is "exhaustively closed."
 
 ## 3. Claims We Can Defend Now
 
-- **Observed**: There is public tooling for hidden-state generation, drafter training, and vLLM deployment in the same ecosystem.
-- **Observed**: Mixed precision deployments are real enough that vLLM needed a fix for Eagle3 quantization config inheritance when a quantized verifier was paired with an unquantized drafter.
-- **Observed**: Quantization can interact poorly with speculative decoding at inference time, as documented by SpecMQuant.
-- **Inferred**: Public evidence for quantized inference support does not imply public evidence for quantized-teacher training.
-- **Inferred**: The current draft should frame the contribution as a fairness-tight empirical study plus a minimal training modification, not as a sweeping literature verdict.
+- **Observed**: EAGLE-3-style drafters can be trained offline from hidden states extracted by either a BF16 or an AWQ W4A16 teacher on Qwen3-8B.
+- **Observed**: At 1k training examples and 20-question MT-Bench subset, a BF16-trained drafter evaluated on an AWQ W4A16 verifier matches its BF16-on-BF16 row within noise.
+- **Observed**: At 1k training examples, a W4A16-teacher-trained drafter does not beat the BF16 control on a W4A16 verifier.
+- **Inferred**: W4A16 is the correct "null cell" of the study; the paper's contribution cannot rely on this cell.
+- **Inferred**: The existence of the null cell is informative: it tells practitioners they do not need QAT draft training for AWQ-style weight-only deployments.
 
 ## 4. Claims That Still Require Experiments
 
-### H1. Precision mismatch creates a measurable performance gap
+The hypotheses are restructured around the new thesis. All hypotheses assume:
 
-- **Hypothesized**: Under a matched training and inference stack, a BF16-trained control drafter loses mean accepted length and/or latency when evaluated against a W4A16 verifier instead of the BF16 verifier.
-- **Working success threshold**: At least one primary metric worsens by 5% or more relative to the BF16-verifier control, with paired 95% confidence intervals excluding zero.
+- Qwen3-8B as the primary model family.
+- Llama-3.1-8B as a secondary transfer target for at least H1 and H2.
+- Matched data, tokenizer, seed, optimizer, sequence length, epoch budget, drafter parameter count, and speculative budget across all training runs within a given cell comparison.
 
-### H2. Quantization-aware training recovers some of the lost performance
+### H1 (confirmatory, mostly already run). Weight-only quantization does not introduce measurable drafter-facing drift.
 
-- **Hypothesized**: A drafter trained against the W4A16 verifier outperforms the matched BF16-trained control on the same W4A16 verifier, with no extra inference-time stage.
-- **Working success threshold**: The quantization-aware drafter recovers at least 25% of the acceptance loss, or improves end-to-end latency or ITL by at least 5%, relative to the matched BF16-trained control, while preserving exact output equivalence.
+- **Hypothesized** (already observationally supported by the 1k pilot): A BF16-trained drafter evaluated on a W4A16 (AWQ) verifier does not lose acceptance relative to the BF16→BF16 row, and the layer-wise hidden-state drift between BF16 and AWQ teachers is small.
+- **Working success threshold**: At 8k training examples, |α[0] delta| < 2 percentage points on the primary benchmark, and mean per-layer CKA between BF16 and AWQ hidden states at drafter tap points is ≥ 0.98. Repeat on Llama-3.1-8B as a transfer check.
 
-### H3. Recovery is consistent with reduced representation mismatch
+### H2 (core new hypothesis). Activation-quantizing regimes introduce measurable drift and acceptance loss.
 
-- **Hypothesized**: Improvements in acceptance correlate with reduced hidden-state drift and improved logit agreement between the drafter-facing teacher signals and the quantized verifier.
-- **Working success threshold**: At least one representation-level diagnostic moves in the same direction as the acceptance improvement, and the paper can show that verifier-side systems overhead alone does not explain the result.
+- **Hypothesized**: A BF16-trained drafter evaluated on a W8A8 SmoothQuant verifier (and separately, an FP8-all-quantized verifier, and a BF16-weight + KV4 verifier) loses acceptance relative to the BF16→BF16 row.
+- **Working success threshold**: At least one of the three activation-quantized cells shows α[0] drop ≥ 5 percentage points, with paired 95% CI excluding zero on per-prompt deltas.
+- **Kill rule**: If no activation-quantized cell shows a measurable drop, revert to the null-result framing (see §11).
 
-These are proposal-stage thresholds. They should be revised only after the first pilot measurements are available.
+### H3 (recovery, conditional on H2). Quantization-aware draft training recovers some of the H2 loss.
+
+- **Hypothesized**: For any activation-quantized cell where H2 is confirmed, a drafter trained from that cell's hidden states beats the matched BF16-trained control on the same verifier.
+- **Working success threshold**: Recovers ≥ 25% of the α[0] loss or improves end-to-end ITL by ≥ 5%, while preserving exact-output equivalence with autoregressive decoding on the same verifier.
+
+### H4 (mechanism). Layer-wise drift predicts acceptance loss.
+
+- **Hypothesized**: Across cells, mean CKA (or mutual-information proxy) between BF16 and quantized teacher hidden states at drafter tap layers correlates with |α delta| at position 0.
+- **Working success threshold**: Spearman ρ ≥ 0.6 across ≥ 6 cells (spanning W4A16, W8A8, FP8, KV4, and any negative controls), with the correlation figure carrying the paper's mechanism story.
+
+These thresholds are proposal-stage. They should be revisited after the first activation-quantized run.
 
 ## 5. Canonical Implementation Stack
 
-Use one canonical stack for the main paper:
+Use one canonical stack for training and evaluation. Add a quantization toolchain for each new cell, but keep the drafter and evaluation code fixed.
 
-- `speculators + vLLM` for hidden-state generation, training, inference, and benchmarking.
-- One model family first: Llama-3.1-8B or another single 8B-class family, but do not mix families in the core result.
-- One quantization family first: W4A16 weight-only quantization.
-- One drafter family first: EAGLE-3 style drafter.
+- Drafter training and evaluation: the current `peagle_q` repo (transformers-based teacher runner).
+- Model family: Qwen3-8B primary. Llama-3.1-8B-Instruct as a secondary transfer family.
+- Drafter architecture: EAGLE-3-style multi-tap fused head, held constant across cells.
+- Quantization toolchain per cell:
+  - W4A16 → `autoawq` (done).
+  - W8A8 → `llm-compressor` (SmoothQuant + GPTQ-INT8 activations).
+  - FP8 all-quantized → `torchao` FP8 recipe if H100 access is available; otherwise mark as deferred.
+  - KV4 cache → either the verifier-side KV-quant path in vLLM, or a custom KV-cache quantizer in the transformers runner. Pick one and document.
 
-Why this matters:
+Contingency: if any quantization backend is not installable on Sol, the cell is marked deferred and does not enter the main comparison table.
 
-- **Inferred**: If the paper mixes `SpecForge`, `EAGLE`, and `speculators` in the main result, reviewers can argue that any effect comes from framework differences rather than teacher precision.
-- **Observed**: `speculators` is already aligned with vLLM deployment and hidden-state generation, so it minimizes cross-stack confounds.
+### Compute path
 
-Contingency path:
-
-- `SpecForge` can remain a backup implementation if `speculators` cannot expose the needed quantized-teacher training path, but that should be reported as contingency engineering, not as the main scientific setup.
-
-### Low-Compute Gemma Pilot
-
-- **Observed**: [vLLM's supported-models page](https://docs.vllm.ai/en/latest/models/supported_models/) lists `GemmaForCausalLM`, `Gemma2ForCausalLM`, and `Gemma3ForCausalLM` as supported text-generation architectures.
-- **Observed**: [Google's Gemma documentation overview](https://ai.google.dev/gemma/docs) and [Gemma 3 model card](https://ai.google.dev/gemma/docs/core/model_card_3) describe small Gemma 3 checkpoints, including 270M, 1B, and 4B variants, and position them for lower-resource deployments.
-- **Observed**: The public `speculators` supported-model matrix currently lists Llama, Qwen3, and gpt-oss as end-to-end supported verifier families, but does not list Gemma.
-- **Inferred**: Gemma is a good candidate for a cheap pilot that validates local model loading, chat-template rendering, hidden-state extraction, and small-scale draft-training plumbing.
-- **Inferred**: A Gemma pilot should be treated as pipeline validation, not as the paper's primary empirical result, until the chosen `speculators + vLLM` stack is shown to support Gemma end to end for quantized-verifier training and evaluation.
-
-Practical recommendation:
-
-- Use `google/gemma-3-1b-it` for the first smoke tests when the goal is simply to verify that the local stack works.
-- Use `google/gemma-3-4b-it` only if the 1B path succeeds and a slightly more realistic pilot is worth the extra cost.
-- Do not use Gemma as the paper's anchor model family unless quantized verifier loading, teacher-signal extraction, drafter training, and evaluation all work cleanly in the canonical stack.
-- Keep one publicly supported `speculators` verifier family, such as Llama or Qwen3, as the default paper target unless Gemma is validated end to end.
-
-### Recommended Start Path
-
-- **Inferred**: The safest start is a two-family strategy: `Gemma` for cheap local validation, then `Qwen3-8B` for the first paper-relevant pilot.
-- **Inferred**: `Qwen3-8B` is a better first serious experiment target than Gemma because it is a publicly supported `speculators` verifier family and avoids the access friction of gated Llama checkpoints.
-- **Inferred**: `Llama-3.1-8B-Instruct` should be treated as an optional follow-on target, not the first execution step, unless access is already in place and the team specifically wants Llama as the anchor family.
-- **Inferred**: If Sol access at ASU is available, the project should no longer be planned around Colab-style constraints for the main pilot.
-
-### Sol Compute Path
-
-- **Observed**: The available Sol node types provided for planning include standard CPU nodes, high-memory CPU nodes, A30 GPU nodes, MIG slices from A100 GPUs, and `4x NVIDIA A100 (80 GiB)` GPU nodes with `512 GiB` host RAM.
-- **Inferred**: The `4x A100 80 GiB` nodes are the preferred environment for the first paper-relevant pilot because they remove most of the memory pressure and session-fragility concerns that shaped the lower-compute fallback plan.
-- **Inferred**: The `A30` nodes are acceptable for smoke tests, data preprocessing, or lighter evaluation, but they are a weaker default for the main matched-control training runs.
-- **Inferred**: `MIG` slices are useful only if queue access is constrained; they are not the preferred environment for the main extraction and training path because they reduce per-job flexibility.
-
-Practical compute recommendation:
-
-- Use a local machine only for the first `Gemma 1B` smoke test.
-- Use Sol `A100 80 GiB` nodes for the first real `Qwen3-8B` BF16 and AWQ extraction, evaluator validation, and matched-control training.
-- Use Sol high-speed scratch storage for extracted hidden states, checkpoints, and benchmark logs rather than relying on home storage for large intermediate artifacts.
-- Treat `Llama-3.1-8B-Instruct` as more realistic on Sol than on Colab because the A100 nodes remove most single-session memory pressure, but still keep Qwen3 as the first primary target unless there is a strong reason to prefer Llama.
-
-Working plan:
-
-#### Phase 0. Gemma local smoke test
-
-- Run a local or CPU-bound smoke test with `google/gemma-3-1b-it`.
-- Success criteria:
-  - model download and tokenizer setup work
-  - chat-template rendering works
-  - hidden-state extraction works at the chosen tap layers
-  - plain autoregressive generation returns a sensible short answer
-- If this fails, fix the local environment before spending time on quantization or training.
-
-#### Phase 1. Qwen3-8B stack validation
-
-- Move immediately to `Qwen3-8B` for the first real experiment path.
-- Run this phase on a Sol `A100 80 GiB` node if access is available.
-- Validate the canonical stack on a tiny prompt set:
-  - BF16 verifier load
-  - prompt formatting and tokenizer stability
-  - hidden-state extraction on a small JSONL slice
-  - a short autoregressive benchmark pass
-- Success criteria:
-  - extracted tensor shapes and layer taps are stable across prompts
-  - the same prompt file can be reused without tokenizer drift
-  - the evaluator produces consistent exact-output checks on a mini benchmark
-
-#### Phase 2. Qwen3-8B precision-mismatch pilot
-
-- Use `Qwen3-8B` BF16 and AWQ checkpoints on the same prompts.
-- Prefer Sol scratch storage for this phase so BF16 and AWQ extraction outputs can be regenerated or resumed without home-directory pressure.
-- First measure verifier-side drift before full training:
-  - hidden-state drift at drafter tap layers
-  - logit agreement on the same prompts
-  - any acceptance drop from a BF16-trained control drafter, if a small control drafter is already available
-- Success criteria:
-  - at least one mismatch diagnostic moves meaningfully between BF16 and AWQ
-  - the quantized verifier path runs cleanly enough to justify matched training
-- If there is no measurable mismatch signal, stop or narrow the project before larger training runs.
-
-#### Phase 3. Qwen3-8B matched-control training
-
-- Train exactly two fresh drafters on the same data and budget:
-  - BF16-control drafter
-  - W4A16 quantization-aware drafter
-- On Sol, this phase should be treated as the default main run location rather than a fallback cluster option.
-- Start with `1k` examples, then `8k`, and only then consider the larger run budget.
-- Evaluate only the clean core rows first:
-  - BF16-control -> BF16 verifier
-  - BF16-control -> W4A16 verifier
-  - Quantization-aware -> W4A16 verifier
-- Success criteria:
-  - the BF16-control degrades on W4A16
-  - the quantization-aware drafter beats the matched BF16-control on the same W4A16 verifier
-
-#### Phase 4. Optional Llama transfer
-
-- Move to `Llama-3.1-8B-Instruct` only after the Qwen3-8B pilot shows a real signal.
-- If Sol `A100 80 GiB` access is stable, this phase is operationally reasonable; if not, keep it out of scope.
-- Use this phase only if one of the following is true:
-  - Llama is strategically important for the paper
-  - reviewers or collaborators will care more about Llama than Qwen3
-  - the team already has stable access to the required checkpoints and quantized variants
-- If Qwen3 does not show a clean effect, do not escalate to Llama just to rescue the story.
-
-Decision rule:
-
-- Start with `Gemma 1B` to de-risk the environment.
-- Use `Qwen3-8B` on Sol for the first experiment that is meant to support the paper.
-- Treat `Llama-3.1-8B-Instruct` as optional unless there is already a positive Qwen3 result or a strong external reason to prefer Llama.
+- Use Sol `4x A100 80 GiB` nodes for the main matched-control training runs. A single A100 80 GiB is enough for 8B-class verifier inference and 8k-example training.
+- Use Sol scratch (`$SCRATCH`) for all large intermediate artifacts.
+- Keep Gemma 1B only for local smoke tests; do not enter the main comparison.
+- Treat Llama-3.1-8B-Instruct as a transfer-family check, not a replacement for Qwen3.
 
 ## 6. Fairness-Tight Experimental Contract
 
-The main comparison should use freshly trained matched controls rather than only public checkpoints.
+The core matrix has two axes: **what gets quantized** (W4A16, W8A8, FP8, KV4) and **what the drafter trained on** (BF16 teacher, matched-quantized teacher). Every cell in the main table uses freshly trained matched controls.
 
-### Required training runs
+### Required training runs per model family
 
-- Fresh BF16-control drafter trained with the exact same data, tokenizer, optimizer, sequence length, epoch budget, and compute budget as the proposed method.
-- Fresh quantization-aware drafter trained against the W4A16 verifier under the same settings.
-- Published public checkpoint used only as a secondary external baseline.
+- BF16-control drafter (already exists for Qwen3-8B at 1k; retrain at 8k, multi-seed).
+- Per activation-quantized cell: one drafter trained from that cell's teacher hidden states, under the same hyperparameters as the BF16 control.
 
 ### Required evaluation configs
 
-| Config | Drafter training target | Verifier weights | Verifier activations | KV cache | Drafter weights | Role |
-| --- | --- | --- | --- | --- | --- | --- |
-| AR BF16 baseline | None | BF16 | BF16 | Fixed across comparisons | N/A | Upper-bound verifier reference |
-| AR W4A16 baseline | None | W4A16 | FP16 if weight-only quantization is used | Same as above | N/A | Quantized verifier reference |
-| External public drafter -> W4A16 | Public checkpoint | W4A16 | FP16 if weight-only quantization is used | Same as above | FP16 or BF16 | Secondary external baseline |
-| Matched BF16-control -> BF16 | BF16 | BF16 | BF16 | Same as above | FP16 or BF16 | Control |
-| Matched BF16-control -> W4A16 | BF16 | W4A16 | FP16 if weight-only quantization is used | Same as above | FP16 or BF16 | Precision-mismatch test |
-| Quantization-aware -> W4A16 | W4A16 | W4A16 | FP16 if weight-only quantization is used | Same as above | FP16 or BF16 | Proposed method |
+| Config | Drafter trained on | Verifier weights | Verifier activations | KV cache | Role |
+| --- | --- | --- | --- | --- | --- |
+| AR BF16 baseline | None | BF16 | BF16 | FP16 | Upper-bound verifier reference |
+| BF16 drafter → BF16 | BF16 | BF16 | BF16 | FP16 | Row (a) — matched control |
+| BF16 drafter → W4A16 | BF16 | W4 | FP16 | FP16 | Row (b) — null-cell confirmation |
+| W4A16 drafter → W4A16 | W4A16 | W4 | FP16 | FP16 | Row (c) — null-cell ceiling |
+| BF16 drafter → W8A8 | BF16 | W8 | INT8/FP8 | FP16 | H2 test cell 1 |
+| W8A8 drafter → W8A8 | W8A8 | W8 | INT8/FP8 | FP16 | H3 recovery cell 1 |
+| BF16 drafter → KV4 | BF16 | BF16 | BF16 | INT4 | H2 test cell 2 |
+| KV4 drafter → KV4 | KV4 | BF16 | BF16 | INT4 | H3 recovery cell 2 |
+| BF16 drafter → FP8 all | BF16 | FP8 | FP8 | FP8 | H2 test cell 3 (deferred if no H100) |
+| FP8 drafter → FP8 all | FP8 | FP8 | FP8 | FP8 | H3 recovery cell 3 (deferred if no H100) |
 
-Rules for keeping the comparison clean:
+### Rules for keeping the comparison clean
 
-- Keep prompt formatting, tokenizer, decoding settings, speculative token budget, and benchmark prompts fixed.
-- Keep KV-cache precision fixed across the primary comparison unless KV precision is itself the variable being studied.
-- Hold drafter parameter count constant between the BF16-control and quantization-aware runs.
-- Require speculative outputs to match autoregressive outputs from the same verifier.
+- Prompt formatting, tokenizer, decoding settings, speculative token budget, and benchmark prompts stay fixed across all rows.
+- Drafter parameter count stays constant across all rows in a given model family.
+- Each drafter training run uses three seeds; report mean and seed variance.
+- Speculative outputs must match autoregressive outputs from the same verifier on the same prompts at temperature 0.
+- The same extracted dataset (same prompts, same sequence length cap, same chat template) is used for every drafter training run within a family.
 
 ## 7. Mechanism Diagnostics
 
-Do not rely on end-to-end speed alone. The paper should include diagnostics that separate representation mismatch from plain verifier overhead.
+These diagnostics are required for all cells in the main table. They carry the paper regardless of which direction H2 resolves in.
 
-### Required diagnostics
+- Per-layer hidden-state drift at drafter tap points: CKA(BF16 teacher, quantized teacher) on matched prompt tokens.
+- Per-layer logit agreement between BF16 and quantized verifiers: top-1 agreement and KL divergence.
+- Acceptance by speculative depth (α per position), not just aggregate τ.
+- Exact-output equivalence checks between speculative and autoregressive decoding on the same verifier.
+- Latency decomposition into drafting time, verifier time (parallel-verification path), and end-to-end latency.
+- Self-feeding approximation cost: τ(sequential) − τ(parallel) on the same drafter, reported per cell.
 
-- Layerwise hidden-state drift between BF16 and W4A16 verifier runs at the teacher extraction points used for drafter training.
-- Logit agreement metrics between BF16 and W4A16 verifier outputs on the same prompts.
-- Acceptance by speculative depth, not just a single aggregate mean.
-- Exact-output equivalence checks against autoregressive decoding on the same verifier.
-- Latency decomposition into drafting time, verifier time, and end-to-end latency.
+### Interpretation rules
 
-### Minimal interpretation rules
-
-- **Observed**: If the W4A16 verifier is slower only because verification overhead dominates, that is a systems result, not a teacher-mismatch result.
-- **Inferred**: A causal training-mismatch story is stronger only if the quantization-aware drafter improves acceptance on the same verifier and the representation diagnostics move in the same direction.
+- **Observed**: A cell where the quantized verifier is merely slower, without any drop in acceptance or measurable drift, is a systems cell, not a teacher-mismatch cell.
+- **Inferred**: A causal training-mismatch story is supported only if (acceptance drops) ∧ (drift rises) ∧ (QAT draft training recovers part of the loss).
 
 ## 8. Evaluation and Reporting
 
 ### Primary metrics
 
-- Mean accepted length
-- Per-position acceptance rate
-- Inter-token latency
-- Time to first token
-- End-to-end latency
+- Mean accepted length τ (reported from the sequential path as the matched-control metric).
+- Per-position acceptance α[k] (same path).
+- Inter-token latency (ITL) and time to first token (TTFT) (reported from the parallel-verification path).
+- End-to-end latency relative to the matched autoregressive baseline (parallel path).
+- Self-feeding approximation cost: τ(sequential) − τ(parallel) reported alongside the speedup row so a reader can price the quality/throughput trade.
+
+### Secondary metrics
+
+- Theoretical-ideal speedup (τ + 1) as a drafter-quality upper bound, independent of verifier speed. Already added to the evaluator output.
+- Verifier-side CKA and logit KL, reported in the mechanism figure.
+
+### Benchmarks
+
+- Primary: MT-Bench, full 80 questions (not the 20-question mini benchmark — that was only for pipeline validation).
+- Secondary: at least one additional benchmark with enough prompts for paired confidence intervals. Candidates: GSM8K (reasoning), HumanEval (code), SlimPajama-Chat or similar (dialog). Pick one and justify.
 
 ### Statistical reporting
 
-- Report paired prompt-level deltas, not just dataset averages.
-- Use confidence intervals for all primary comparisons.
-- Keep MT-Bench as one benchmark, but add one broader benchmark so the paper does not stand or fall on a single prompt set.
-
-### Suggested benchmark posture
-
-- Primary benchmark: MT-Bench
-- One broader secondary benchmark: any benchmark with enough prompts to support paired confidence intervals and latency reporting
+- Paired prompt-level deltas with 95% CIs for every row comparison.
+- Seed variance across three training seeds per drafter.
+- The core results table reports mean ± 95% CI, not point estimates.
 
 The core result should be framed as:
 
-> Quantization-aware training improves speculative decoding on a quantized verifier relative to a matched BF16-trained control under the same stack and compute budget.
+> We show that mismatch between the drafter's training teacher and the deployed quantized verifier is regime-dependent: weight-only quantization (W4A16) is a null cell; activation-quantizing regimes show a measurable acceptance gap; quantization-aware draft training closes part of that gap in the affected cells, with mechanism diagnostics supporting a drift-based explanation.
 
 Not as:
 
@@ -273,44 +221,90 @@ Not as:
 
 ## 9. Kill Criteria and Pivot Paths
 
-- If the matched BF16-control does **not** meaningfully degrade on W4A16, the core motivation is weak. Narrow the paper or stop.
-- If the quantization-aware drafter does **not** beat the matched BF16-control on the same W4A16 verifier, the causal training story is weak. The result may still be publishable as a negative study, but not as a recovery claim.
-- If the gain appears only in wall-clock speed and not in acceptance or representation diagnostics, reframe the result as a systems interaction paper rather than a training-alignment paper.
-- Escalate to W4A8 or FP8 only if the W4A16 pilot suggests the effect exists but is too small to cleanly argue.
+- If H1 fails at 8k (i.e., the W4A16 null result does not hold at larger scale), revisit extraction code, seed variance, and benchmark size before concluding the pilot was a fluke.
+- If H2 fails across all activation-quantized cells, the paper becomes a null-result paper: **"EAGLE-style drafters are robust across common quantization regimes"**, anchored by the mechanism figure. This is still publishable, at workshop scale.
+- If H2 holds but H3 fails, the paper becomes **"Where speculative decoding breaks under quantization, and why training the drafter on quantized teachers is not enough to fix it."** This is a stronger negative result and still publishable.
+- If H2 and H3 both hold, the paper is a full characterization study. Target a main conference (ACL, EMNLP, NeurIPS datasets/benchmarks track).
+- If parallel-path latency numbers look interesting, the paper adds a systems section, but latency does not carry the paper on its own.
 
 ## 10. What This Draft Intentionally Removes from the Core Story
 
-The following items were present in the earlier concept note but should stay out of the main paper draft until they are either measured or updated with exact dates:
-
-- Predicted acceptance values and projected speedups
-- Estimated training-hour claims not backed by pilot runs
-- Colab compute-unit economics
-- Venue recommendations and speculative submission deadlines
-
-Those details can live in project notes. They should not carry the argument in the paper draft.
+- Any claim framed as "quantization-aware training recovers lost performance" without naming the regime.
+- Any latency claim not produced by the parallel-verification path (`speculation_mode="parallel"` or `"both"`). The sequential-path `speedup_vs_ar` remains defined only for matched-control comparison and is not a systems claim.
+- Predicted acceptance values, projected speedups, training-hour estimates, and venue-specific deadlines. Those belong in project notes, not the paper draft.
+- The mini 20-question benchmark as a headline result. It remains only as a pipeline sanity check.
 
 ## 11. Deliverables for the Next Revision
 
-The next paper revision should add these concrete artifacts:
+Concrete artifacts that should exist before the next paper revision:
 
-- A novelty-audit appendix with dated search protocol, inclusion criteria, exclusion criteria, and source table
-- A pilot results table for the matched BF16-control and quantization-aware W4A16 runs
-- A mechanism figure showing hidden-state drift or logit agreement alongside acceptance changes
-- A one-paragraph exactness statement confirming speculative outputs match the autoregressive verifier
+- The `eval.py` 6-verifier-pass-per-step bug is fixed and the pre-fix vs post-fix latency delta is documented.
+- 8k training runs finished for the BF16 control and the AWQ W4A16 drafter on Qwen3-8B, with three seeds each. This confirms or overturns H1 at scale.
+- At least one activation-quantized cell (preferred order: W8A8 SmoothQuant, then KV4, then FP8) has both its BF16-control row and its matched-QAT row run.
+- A mechanism figure with per-layer CKA and logit KL between BF16 and each quantized teacher, aligned with per-cell α deltas.
+- A Llama-3.1-8B transfer run for H1 at minimum (ideally also one H2 cell).
+- A novelty-audit appendix with a dated search protocol, inclusion and exclusion criteria, and a source table reproducible by another reader.
 
-## Sol Pre-Flight Checklist
+## 12. Sol Execution Plan (Revised)
 
-Run through this checklist on Sol **before** submitting `submit_1k_pilot.sh`.
+### Phase A: confirm the null cell at 8k (currently staged)
+
+- Run the 8k chain for Qwen3-8B: extract BF16, extract AWQ, train BF16 drafter (5 epochs, seed 42), train AWQ drafter (5 epochs, seed 42), evaluate rows (a), (b), (c) on the full MT-Bench (80 questions).
+- Success: τ delta between rows (a) and (b) stays below 2 percentage points on full MT-Bench, with CIs excluding a > 5-point drop. This formally closes H1.
+- Add two more seeds (1, 7) for each drafter. This gives the seed-variance number the paper needs.
+
+### Phase B: fix the evaluator systems bug
+
+- Refactor `speculative_generate_local` to issue a single verifier forward pass per speculative step that returns both tap-layer hidden states (for the next proposal) and verification logits.
+- Re-run row (a) as a regression: τ and α must stay unchanged; ITL and tokens-per-second should increase materially.
+- Only after this fix can any latency column enter the paper.
+
+### Phase C: add W8A8 (SmoothQuant) cell on Qwen3-8B
+
+- Install and validate `llm-compressor` on Sol. Produce a W8A8 Qwen3-8B checkpoint.
+- Run a smoke test: autoregressive generation works, hidden-state extraction works.
+- Extract W8A8 teacher hidden states at 1k, then 8k.
+- Train a W8A8-aware drafter (3 seeds).
+- Evaluate: BF16 drafter → W8A8 (H2 test), W8A8 drafter → W8A8 (H3 recovery).
+- Decision point: does the BF16 drafter drop ≥ 5 points on α[0] against the W8A8 verifier?
+
+### Phase D: add KV4 cache cell
+
+- Implement or adopt a KV4 cache quantizer on the verifier side that does not change weight precision.
+- Extract teacher hidden states with KV4 active so the drafter sees the true deployed distribution.
+- Train a KV4-aware drafter (3 seeds).
+- Evaluate H2 and H3 for this cell.
+
+### Phase E (optional): add FP8 all-quantized cell
+
+- Only if H100 access becomes available, or if FP8-all emulation on A100 is acceptable for the paper's purpose.
+- Otherwise mark as deferred and state so in the paper.
+
+### Phase F: transfer check on Llama-3.1-8B
+
+- Repeat Phase A and at least one activation-quantized phase on Llama-3.1-8B-Instruct.
+- If Llama access is blocked, document and continue with Qwen3 only, noting the single-family limitation.
+
+### Phase G: mechanism figure
+
+- For each teacher in (BF16 Qwen3, AWQ Qwen3, W8A8 Qwen3, KV4-active Qwen3, BF16 Llama, matched Llama cells), compute per-layer CKA and logit KL against the BF16 teacher on a fixed prompt set.
+- Cross-plot against α[0] deltas for the corresponding cells.
+- This is the paper's main mechanism figure.
+
+## 13. Sol Pre-Flight Checklist
+
+Run through this checklist on Sol **before** submitting `submit_8k_pilot.sh` (new phases below will need sibling scripts for W8A8 and KV4).
 
 ### Environment variables
 
 ```bash
 export PEAGLE_ROOT=/path/to/this/repo
 export PEAGLE_BF16_MODEL=Qwen/Qwen3-8B
-export PEAGLE_AWQ_MODEL=Qwen/Qwen3-8B-AWQ          # official 1.1M-download AWQ checkpoint
+export PEAGLE_AWQ_MODEL=Qwen/Qwen3-8B-AWQ
+export PEAGLE_W8A8_MODEL=   # set once llm-compressor produces a checkpoint
 export PEAGLE_DATASET=/path/to/sharegpt_or_other.jsonl
 export PEAGLE_RUN_ROOT=$SCRATCH/peagle-q/$USER
-export PEAGLE_BENCHMARK=$PEAGLE_ROOT/benchmarks/mini_mt_bench.jsonl
+export PEAGLE_BENCHMARK=$PEAGLE_ROOT/benchmarks/mt_bench_full.jsonl
 export PEAGLE_CACHE_ROOT=$PEAGLE_RUN_ROOT/cache
 ```
 
@@ -321,50 +315,58 @@ export PEAGLE_CACHE_ROOT=$PEAGLE_RUN_ROOT/cache
 | 1 | Build venv | `bash scripts/sol/setup_env.sh` | Prints "Environment ready" with correct paths |
 | 2 | Python version | `python3 --version` (inside venv) | >= 3.10 |
 | 3 | Core imports | `python3 -c "import peagle_q; import torch; print(torch.cuda.is_available())"` | `True` |
-| 4 | AWQ import | `python3 -c "from awq import AutoAWQForCausalLM; print('OK')"` | `OK` — if this fails, `pip install autoawq` in the venv |
-| 5 | Dataset exists | `wc -l $PEAGLE_DATASET` | >= 1000 lines |
-| 6 | Dataset valid | `head -1 $PEAGLE_DATASET \| python3 -m json.tool` | Parses as valid JSON with `conversations`, `messages`, or `prompt` key |
-| 7 | BF16 smoke | `bash scripts/sol/run_cli.sh smoke --config configs/sol/qwen3_8b_smoke.json` | JSON output with `hidden_state_shape` and `autoregressive.text` |
-| 8 | AWQ smoke | `bash scripts/sol/run_cli.sh smoke --config configs/sol/qwen3_8b_smoke_awq.json` | Same as above — confirms quantized model loads and generates |
-| 9 | Scratch space | `df -h $SCRATCH` | Enough free space for hidden-state dumps (~50 GB for 8k examples) |
-| 10 | Slurm access | `sinfo -p YOUR_PARTITION` | GPU partition is visible and has idle or mixed nodes |
+| 4 | AWQ import | `python3 -c "from awq import AutoAWQForCausalLM; print('OK')"` | `OK` |
+| 5 | llm-compressor import (Phase C) | `python3 -c "import llmcompressor; print('OK')"` | `OK` once Phase C starts |
+| 6 | Dataset exists | `wc -l $PEAGLE_DATASET` | >= 8000 lines for the 8k chain |
+| 7 | Full MT-Bench exists | `wc -l $PEAGLE_BENCHMARK` | == 80 questions |
+| 8 | BF16 smoke | `bash scripts/sol/run_cli.sh smoke --config configs/sol/qwen3_8b_smoke.json` | JSON with `hidden_state_shape` and `autoregressive.text` |
+| 9 | AWQ smoke | `bash scripts/sol/run_cli.sh smoke --config configs/sol/qwen3_8b_smoke_awq.json` | Same as above |
+| 10 | Scratch space | `df -h $SCRATCH` | At least 200 GB free for the expanded matrix |
+| 11 | Slurm access | `sinfo -p YOUR_PARTITION` | GPU partition visible |
+| 12 | Evaluator bug status | `grep -n "forward_ids" peagle_q/eval.py` | One verifier pass per speculative step (Phase B done) before any latency claim |
 
-### Submit the full pipeline
-
-Once all 10 checks pass:
+### Submit the full 8k chain
 
 ```bash
-bash scripts/sol/submit_1k_pilot.sh --account YOUR_ACCOUNT --partition YOUR_PARTITION
+bash scripts/sol/submit_8k_pilot.sh --account YOUR_ACCOUNT --partition YOUR_PARTITION
 ```
 
-This submits 8 chained jobs: BF16 smoke → AWQ smoke → parallel extractions → parallel training → 3 evaluation rows. Monitor with `squeue -u $USER`.
-
-### Expected outputs
+### Expected outputs (per seed, per family)
 
 ```
 $PEAGLE_RUN_ROOT/qwen3_8b/
-├── extract_bf16_1k/          # manifest.jsonl + tensors/
-├���─ extract_awq_1k/           # manifest.jsonl + tensors/
-├── train_bf16_1k/            # checkpoints/ + metrics.jsonl
-├── train_awq_1k/             # checkpoints/ + metrics.jsonl
-├── eval_bf16_on_bf16.json    # Row (a): upper bound
-├── eval_bf16_on_awq.json     # Row (b): shows the gap
-└── eval_awq_on_awq.json      # Row (c): our contribution
+├── extract_bf16_8k/
+├── extract_awq_8k/
+├── train_bf16_8k_seed42/
+├── train_bf16_8k_seed1/
+├── train_bf16_8k_seed7/
+├── train_awq_8k_seed42/
+├── train_awq_8k_seed1/
+├── train_awq_8k_seed7/
+├── eval_bf16_on_bf16_seed42.json
+├── eval_bf16_on_awq_seed42.json
+├── eval_awq_on_awq_seed42.json
+└── ... (per seed)
 ```
 
 ### Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `ModuleNotFoundError: awq` | autoawq not installed in venv | `pip install autoawq` inside `.venv-sol` |
-| AWQ smoke hangs or OOMs | Model too large for node | Verify you're on an A100 80GB node, not A30 |
-| Extraction produces 0 tensors | `$PEAGLE_DATASET` path wrong or empty | Check `echo $PEAGLE_DATASET` and `wc -l` |
-| Training crashes on projection load | `lm_head` weight not found on AWQ model | Check Slurm `.err` file; may need `projection_model_path` pointing to BF16 model (already set in configs) |
-| Eval shows `tau: 0.0` | Draft checkpoint path wrong or empty | Verify `train_*/checkpoints/best.pt` exists |
+| `config contains unresolved environment variable` | Env var not exported into the batch env | Export + `echo >> ~/.bashrc` + resubmit |
+| `ModuleNotFoundError: awq` | `autoawq` not installed in venv | `pip install autoawq` inside `.venv-sol` |
+| `ModuleNotFoundError: llmcompressor` | Phase C not installed yet | Install only when entering Phase C |
+| AWQ smoke hangs or OOMs | Node too small | Confirm A100 80 GB, not A30 |
+| Extraction produces 0 tensors | `$PEAGLE_DATASET` is a directory, not a file | Point to the `.jsonl` path |
+| Training crashes on projection load | `lm_head` not on quantized checkpoint | Set `projection_model_path` to the matched BF16 model |
+| Eval shows `tau: 0.0` | Draft checkpoint missing or empty | Verify `train_*/checkpoints/best.pt` exists |
+| Speedup ≪ 1 | 6-verifier-pass bug still present | Apply Phase B fix before trusting latency |
 
-## Anchor Sources
+## 14. Anchor Sources
 
 - [P-EAGLE paper page](https://papers.cool/arxiv/2602.01469)
 - [SpecMQuant / CoRR abs/2505.22179](https://dblp.org/rec/journals/corr/abs-2505-22179.html)
 - [vLLM Speculators repository](https://github.com/vllm-project/speculators)
 - [vLLM PR #25883](https://github.com/vllm-project/vllm/pull/25883)
+- [llm-compressor](https://github.com/vllm-project/llm-compressor)
+- [KIVI (KV-quant literature)](https://arxiv.org/abs/2402.02750)
