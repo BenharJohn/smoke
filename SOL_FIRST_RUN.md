@@ -1,8 +1,26 @@
 # Sol First Run
 
 **Git repo**: `https://github.com/BenharJohn/smoke.git`
-Clone path on Sol: `/home/$USER/smoke`
-Push from your local machine, then pull on Sol with `bash scripts/sol/bootstrap_branch.sh YOUR_BRANCH`.
+Clone path on Sol: `~/smoke` (`/home/bjohn10/smoke`)
+**Active branch**: `codex/sol-qwen3-setup`
+
+## Quick reference — pull latest on Sol
+
+```bash
+cd ~/smoke
+git fetch origin
+git checkout codex/sol-qwen3-setup
+git pull --ff-only origin codex/sol-qwen3-setup
+```
+
+## Quick reference — push from local (Windows)
+
+```bash
+cd "F:/Research paper/smoke-repo"
+git add <files>
+git commit -m "..."
+git push origin codex/sol-qwen3-setup
+```
 
 ## 0. Set paths and persist to ~/.bashrc
 
