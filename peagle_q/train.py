@@ -37,6 +37,7 @@ class TrainRunConfig:
     num_workers: int = 0
     device: str | None = None
     dtype: str = "float16"
+    seed: int = 42
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -117,6 +118,10 @@ def _save_checkpoint(
 
 
 def train_draft_head(config: TrainRunConfig) -> dict[str, Any]:
+    torch.manual_seed(config.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(config.seed)
+
     output_dir = Path(config.output_dir)
     checkpoints_dir = output_dir / "checkpoints"
     checkpoints_dir.mkdir(parents=True, exist_ok=True)
