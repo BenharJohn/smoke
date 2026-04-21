@@ -26,7 +26,24 @@ def _expand_config_value(value: Any) -> Any:
 def _load_config_file(path: str | None) -> dict[str, Any]:
     if not path:
         return {}
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    config_path = Path(path)
+    try:
+        raw_text = config_path.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        raise SystemExit(f"could not read config file {config_path}: {exc}") from exc
+
+    if not raw_text.strip():
+        raise SystemExit(f"config file is empty: {config_path}")
+
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        preview = raw_text[:120].encode("unicode_escape").decode("ascii")
+        raise SystemExit(
+            f"invalid JSON in config file {config_path}: {exc.msg} at "
+            f"line {exc.lineno} column {exc.colno}. Preview: {preview}"
+        ) from exc
+
     expanded = _expand_config_value(payload)
     unresolved: list[str] = []
 

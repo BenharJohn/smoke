@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import codecs
 import json
 from pathlib import Path
 
@@ -40,6 +41,30 @@ def test_load_config_file_fails_clearly_on_unresolved_env_var(monkeypatch) -> No
     )
     try:
         with pytest.raises(SystemExit, match="unresolved environment variables"):
+            _load_config_file(str(config_path))
+    finally:
+        if config_path.exists():
+            config_path.unlink()
+
+
+def test_load_config_file_accepts_utf8_bom() -> None:
+    config_path = Path("tests/_config_utf8_bom.json")
+    try:
+        config_path.write_bytes(
+            codecs.BOM_UTF8 + json.dumps({"output_dir": "runs/out"}).encode("utf-8")
+        )
+        loaded = _load_config_file(str(config_path))
+        assert loaded["output_dir"] == "runs/out"
+    finally:
+        if config_path.exists():
+            config_path.unlink()
+
+
+def test_load_config_file_fails_clearly_on_empty_file() -> None:
+    config_path = Path("tests/_config_empty.json")
+    config_path.write_text("", encoding="utf-8")
+    try:
+        with pytest.raises(SystemExit, match="config file is empty"):
             _load_config_file(str(config_path))
     finally:
         if config_path.exists():
